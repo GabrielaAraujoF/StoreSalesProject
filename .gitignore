@@ -1,0 +1,30 @@
+# =========================
+# Python / Flask
+# =========================
+backend/.venv/
+backend/__pycache__/
+backend/**/*.py[cod]
+backend/.pytest_cache/
+backend/.env
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+
+# =========================
+# Node / Next.js
+# =========================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+
+# =========================
+# Editor
+# =========================
+.vscode/
+
+# =========================
+# Sistema operacional
+# =========================
+.DS_Store
+Thumbs.db
