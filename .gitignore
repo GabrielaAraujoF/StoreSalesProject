@@ -9,6 +9,9 @@ backend/.env
 backend/*.db
 backend/*.sqlite
 backend/*.sqlite3
+backend/**/*.db
+backend/**/*.sqlite
+backend/**/*.sqlite3
 
 # =========================
 # Node / Next.js
