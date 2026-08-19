@@ -4,38 +4,55 @@ from sqlalchemy.exc import IntegrityError
 from app.database.db import db
 from app.models.customer import Customer
 
-
 customers_bp = Blueprint(
     "customers",
     __name__,
     url_prefix="/api/customers",
 )
 
-
 def customer_to_dict(customer):
-    return {
-        "id": customer.id,
+    return{
+        "id":customer.id,
         "name": customer.name,
-        "phone": customer.phone,
+        "phone": customer.phone
     }
-
 
 def validate_customer_data(data):
     if not isinstance(data, dict):
-        return None, ({"error": "O corpo deve conter um JSON válido."}, 400)
+        return None, (
+            {"error":"O corpo deve conter um JSON válido."},
+            400,
+        )
 
     name = data.get("name")
     phone = data.get("phone")
 
     if not isinstance(name, str) or not name.strip():
-        return None, ({"error": "O campo 'name' é obrigatório."}, 400)
+        return None, (
+            {"error": "O campo 'name' é obrigatório."},
+            400,
+        )
+
+    if len(name.strip()) > 100:
+        return None, (
+            {"error": "O campo 'name' deve ter no máximo 100 caracteres."},
+            400,
+        )
 
     if phone is not None and not isinstance(phone, str):
-        return None, ({"error": "O campo 'phone' deve ser um texto."}, 400)
+        return None,(
+            {"error": "O campo 'phone' deve ser um texto."},
+            400,
+        )
 
+    if phone is not None and len(phone.strip()) > 20:
+        return None, (
+            {"error": "O campo 'phone' deve ter no máximo 20 caracteres."},
+            400,
+        )
     return {
         "name": name.strip(),
-        "phone": phone.strip() if phone and phone.strip() else None,
+        "phone": phone.strip() if phone else None,
     }, None
 
 
@@ -52,18 +69,13 @@ def commit_customer_changes():
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
-        return {
-            "error": "Já existe um cliente com este telefone."
-        }, 409
+        return {"error": "Já existe um cliente com este telefone."}, 409
 
     return None
-
-
 @customers_bp.get("/")
 def list_customers():
     customers = Customer.query.order_by(Customer.id).all()
     return {"customers": [customer_to_dict(customer) for customer in customers]}
-
 
 @customers_bp.get("/by-phone")
 def get_customer_by_phone():
@@ -78,7 +90,6 @@ def get_customer_by_phone():
         return {"error": "Cliente não encontrado."}, 404
 
     return customer_to_dict(customer)
-
 
 @customers_bp.get("/<int:customer_id>")
 def get_customer(customer_id):
@@ -121,6 +132,7 @@ def update_customer(customer_id):
     validated_data, error = validate_customer_data(
         request.get_json(silent=True)
     )
+
     if error:
         return error
 
@@ -146,6 +158,7 @@ def delete_customer(customer_id):
 
     if customer is None:
         return {"error": "Cliente não encontrado."}, 404
+
 
     db.session.delete(customer)
     db.session.commit()
