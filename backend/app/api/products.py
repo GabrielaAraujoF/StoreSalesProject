@@ -34,8 +34,14 @@ def validate_product_data(data, *, require_stock=False):
     if not isinstance(name, str) or not name.strip():
         return None, ({"error": "O campo 'name' é obrigatório."}, 400)
 
+    if len(name.strip()) > 100:
+        return None, ({"error": "O campo 'name' deve ter no máximo 100 caracteres."}, 400)
+
     if not isinstance(category, str) or not category.strip():
         return None, ({"error": "O campo 'category' é obrigatório."}, 400)
+
+    if len(category.strip()) > 100:
+        return None, ({"error": "O campo 'category' deve ter no máximo 100 caracteres."}, 400)
 
     try:
         price = Decimal(str(price_value))
@@ -111,6 +117,51 @@ def update_product(product_id):
     product.category = validated_data["category"]
     product.price = validated_data["price"]
     product.stock = validated_data["stock"]
+    db.session.commit()
+
+    return product_to_dict(product)
+
+@products_bp.patch("/<int:product_id>")
+def patch_product(product_id):
+    product = db.session.get(Product, product_id)
+
+    if product is None:
+        return {"error": "Produto não encontrado."}, 404
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return {"error": "O corpo deve conter um JSON válido."}, 400
+
+    allowed_fields = {"name", "category", "price", "stock"}
+    fields_to_update = allowed_fields.intersection(data)
+
+    if not fields_to_update:
+        return {
+            "error": "Informe ao menos um campo válido para atualização."
+        }, 400
+
+    merged_data =  {
+        "name": product.name,
+        "category": product.category,
+        "price": product.price,
+        "stock": product.stock,
+    }
+
+    for field in fields_to_update:
+        merged_data[field] = data[field]
+
+    validated_data, error = validate_product_data(
+        merged_data,
+        require_stock=True,
+    )
+
+    if error:
+        return error
+
+    for field in fields_to_update:
+        setattr(product, field, validated_data[field])
+
     db.session.commit()
 
     return product_to_dict(product)
