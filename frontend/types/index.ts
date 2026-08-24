@@ -12,6 +12,12 @@ export interface Product {
   stock: number;
 }
 
+export type PaymentMethod =
+  | "cash"
+  | "credit_card"
+  | "debit_card"
+  | "pix";
+
 export interface SaleItem {
   id: number;
   product_id: number;
@@ -44,7 +50,7 @@ export interface ProductInput {
 
 export interface SaleInput {
   customer_id?: number | null;
-  payment_method: string;
+  payment_method: PaymentMethod;
   items: Array<{
     product_id: number;
     quantity: number;
