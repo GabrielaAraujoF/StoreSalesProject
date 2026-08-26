@@ -8,6 +8,7 @@ from app.models.customer import Customer
 from app.models.product import Product
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
+from app.models.seller import Seller
 
 
 sales_bp = Blueprint(
@@ -27,6 +28,15 @@ def sale_to_dict(sale):
                 "phone": sale.customer.phone,
             }
             if sale.customer is not None
+            else None
+        ),
+        "seller": (
+            {
+                "id": sale.seller.id,
+                "seller_number": sale.seller.seller_number,
+                "name": sale.seller.name,
+            }
+            if sale.seller is not None
             else None
         ),
         "payment_method": sale.payment_method,
@@ -58,6 +68,16 @@ def validate_sale_data(data):
     ):
         return None, ({
             "error": "O campo 'customer_id' deve ser um inteiro positivo ou null."
+        }, 400)
+
+    seller_id = data.get("seller_id")
+    if (
+        isinstance(seller_id, bool)
+        or not isinstance(seller_id, int)
+        or seller_id <= 0
+    ):
+        return None, ({
+            "error": "O campo 'seller_id' deve ser um inteiro positivo."
         }, 400)
 
     payment_method = data.get("payment_method")
@@ -115,6 +135,7 @@ def validate_sale_data(data):
 
     return {
         "customer_id": customer_id,
+        "seller_id": seller_id,
         "payment_method": payment_method,
         "items": validated_items,
     }, None
@@ -151,8 +172,16 @@ def create_sale():
         if customer is None:
             return {"error": "Cliente não encontrado."}, 404
 
+    seller = db.session.get(Seller, validated_data["seller_id"])
+    if seller is None:
+        return {"error": "Vendedor não encontrado."}, 404
+
+    if not seller.active:
+        return {"error": "Vendedor inativo."}, 409
+
     sale = Sale(
         customer=customer,
+        seller=seller,
         payment_method=validated_data["payment_method"],
         total=Decimal("0.00"),
     )

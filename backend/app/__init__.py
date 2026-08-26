@@ -6,11 +6,13 @@ from app.routes import main_bp
 # importa os modelos
 from app.models.product import Product
 from app.models.customer import Customer
+from app.models.seller import Seller
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.api.products import products_bp
 from app.api.sales import sales_bp
 from app.api.customers import customers_bp
+from app.api.sellers import sellers_bp
 
 def create_app(config_name=None):
     app = Flask(__name__)
@@ -24,5 +26,6 @@ def create_app(config_name=None):
     app.register_blueprint(products_bp)
     app.register_blueprint(sales_bp)
     app.register_blueprint(customers_bp)
+    app.register_blueprint(sellers_bp)
 
     return app
