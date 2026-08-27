@@ -24,11 +24,11 @@ export function createProduct(product: ProductInput): Promise<Product> {
 
 export function updateProduct(
   productId: number,
-  changes: Partial<ProductInput>,
+  product: ProductInput,
 ): Promise<Product> {
   return apiRequest<Product>(`${PRODUCTS_ENDPOINT}${productId}`, {
-    method: "PATCH",
-    body: JSON.stringify(changes),
+    method: "PUT",
+    body: JSON.stringify(product),
   });
 }
 

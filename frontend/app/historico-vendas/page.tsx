@@ -1,10 +1,12 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import type { Metadata } from "next";
+
+import { SalesHistoryPage } from "@/components/sales/sales-history-page";
+
+export const metadata: Metadata = {
+  title: "Histórico de vendas | StoreSales",
+  description: "Consulte as vendas registradas no StoreSales.",
+};
 
 export default function HistoricoVendasPage() {
-  return (
-    <PlaceholderPage
-      title="Histórico de vendas"
-      description="A consulta das vendas realizadas será disponibilizada nesta área."
-    />
-  );
+  return <SalesHistoryPage />;
 }

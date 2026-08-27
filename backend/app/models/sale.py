@@ -14,6 +14,12 @@ class Sale(db.Model):
         nullable=True,
         index=True,
     )
+    seller_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sellers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     total = db.Column(
         db.Numeric(10, 2),
         nullable=False,
@@ -33,8 +39,14 @@ class Sale(db.Model):
         "Customer",
         back_populates="sales",
     )
+
     items = db.relationship(
         "SaleItem",
         back_populates="sale",
         cascade="all, delete-orphan",
+    )
+
+    seller = db.relationship(
+        "Seller",
+        back_populates="sales",
     )
