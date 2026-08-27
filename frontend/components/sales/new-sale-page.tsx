@@ -9,11 +9,13 @@ import { ApiError } from "@/lib/api";
 import { getCustomers } from "@/services/customers";
 import { getProducts } from "@/services/products";
 import { createSale } from "@/services/sales";
+import { getSellerByNumber } from "@/services/sellers";
 import type {
   Customer,
   PaymentMethod,
   Product,
   SaleInput,
+  Seller,
 } from "@/types";
 
 type CartItem = {
@@ -60,12 +62,12 @@ function priceToCents(price: string) {
 function searchable(value: string) {
   return value
     .normalize("NFD")
-    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("pt-BR");
 }
 
 function digitsOnly(value: string | null) {
-  return (value ?? "").replace(/\\D/g, "");
+  return (value ?? "").replace(/\D/g, "");
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -197,6 +199,10 @@ export function NewSalePage() {
   const [isCustomerSearchOpen, setIsCustomerSearchOpen] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState("");
+  const [sellerNumber, setSellerNumber] = useState("");
+  const [selectedSeller, setSelectedSeller] = useState<Seller | null>(null);
+  const [sellerLookupError, setSellerLookupError] = useState<string | null>(null);
+  const [isLoadingSeller, setIsLoadingSeller] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -228,6 +234,61 @@ export function NewSalePage() {
     document.addEventListener("pointerdown", closeSearchResults);
     return () => document.removeEventListener("pointerdown", closeSearchResults);
   }, []);
+
+  useEffect(() => {
+    const normalizedSellerNumber = sellerNumber.trim();
+
+    if (!normalizedSellerNumber) {
+      return;
+    }
+
+    const numericSellerNumber = Number(normalizedSellerNumber);
+    if (
+      !Number.isInteger(numericSellerNumber) ||
+      numericSellerNumber <= 0
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setIsLoadingSeller(true);
+      setSelectedSeller(null);
+      setSellerLookupError(null);
+
+      try {
+        const seller = await getSellerByNumber(
+          numericSellerNumber,
+          controller.signal,
+        );
+
+        if (!seller) {
+          setSellerLookupError("Vendedor não encontrado.");
+        } else if (!seller.active) {
+          setSellerLookupError("Vendedor inativo.");
+        } else {
+          setSelectedSeller(seller);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        setSellerLookupError(
+          getErrorMessage(error, "Não foi possível localizar o vendedor."),
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingSeller(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [sellerNumber]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -310,7 +371,7 @@ export function NewSalePage() {
     const term = customerSearch.trim();
 
     if (!term) {
-      return [];
+      return customers.slice(0, 6);
     }
 
     const textTerm = searchable(term);
@@ -367,6 +428,7 @@ export function NewSalePage() {
   );
   const canFinalize =
     cartItems.length > 0 &&
+    selectedSeller !== null &&
     paymentMethod !== "" &&
     !hasInvalidItem &&
     !isSubmitting;
@@ -493,7 +555,7 @@ export function NewSalePage() {
   }
 
   function updateItemQuantity(productId: number, value: string) {
-    if (!/^\\d*$/.test(value)) {
+    if (!/^\d*$/.test(value)) {
       return;
     }
 
@@ -586,12 +648,13 @@ export function NewSalePage() {
   }
 
   async function finalizeSale() {
-    if (submissionLockRef.current || !canFinalize) {
+    if (submissionLockRef.current || !canFinalize || !selectedSeller) {
       return;
     }
 
     const payload: SaleInput = {
       customer_id: customerId ? Number(customerId) : null,
+      seller_id: selectedSeller.id,
       payment_method: paymentMethod,
       items: cartItems.map((item) => ({
         product_id: item.productId,
@@ -609,6 +672,9 @@ export function NewSalePage() {
       setCartItems([]);
       setCustomerId("");
       setCustomerSearch("");
+      setSellerNumber("");
+      setSelectedSeller(null);
+      setSellerLookupError(null);
       setPaymentMethod("");
       setProductSearch("");
       setSelectionError(null);
@@ -786,9 +852,7 @@ export function NewSalePage() {
                   autoComplete="off"
                   role="combobox"
                   aria-autocomplete="list"
-                  aria-expanded={
-                    isCustomerSearchOpen && customerSearch.trim().length > 0
-                  }
+                  aria-expanded={isCustomerSearchOpen}
                   aria-controls="customer-results"
                   className={`${fieldClasses()} pl-10 pr-10`}
                 />
@@ -803,7 +867,7 @@ export function NewSalePage() {
                 )}
               </div>
 
-              {isCustomerSearchOpen && customerSearch.trim().length > 0 && (
+              {isCustomerSearchOpen && (
                 <div
                   id="customer-results"
                   className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
@@ -866,16 +930,52 @@ export function NewSalePage() {
                 htmlFor="sale-seller"
                 className="text-sm font-bold text-slate-700"
               >
-                Vendedor
+                Número do vendedor <span className="text-red-600">*</span>
               </label>
               <input
                 id="sale-seller"
-                disabled
-                value="Vendedor — integração futura"
-                aria-label="Vendedor — integração futura"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={sellerNumber}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (/^\d*$/.test(value)) {
+                    setSellerNumber(value);
+                    setSelectedSeller(null);
+                    setSellerLookupError(
+                      value && Number(value) <= 0
+                        ? "Informe um número de vendedor válido."
+                        : null,
+                    );
+                    setIsLoadingSeller(false);
+                    setSubmitError(null);
+                  }
+                }}
+                disabled={isSubmitting}
+                placeholder="Ex.: 102"
+                aria-invalid={Boolean(sellerLookupError)}
+                aria-describedby="sale-seller-feedback"
                 className={`${fieldClasses()} mt-2`}
-                readOnly
               />
+              <p
+                id="sale-seller-feedback"
+                className={`mt-1.5 text-xs font-medium ${
+                  sellerLookupError
+                    ? "text-red-600"
+                    : selectedSeller
+                      ? "text-emerald-800"
+                      : "text-slate-500"
+                }`}
+              >
+                {isLoadingSeller
+                  ? "Localizando vendedor..."
+                  : sellerLookupError
+                    ? sellerLookupError
+                    : selectedSeller
+                      ? `Vendedor: ${selectedSeller.name}`
+                      : "Informe o número para identificar o vendedor."}
+              </p>
             </div>
           </section>
 
@@ -1268,6 +1368,8 @@ export function NewSalePage() {
                   >
                     {cartItems.length === 0
                       ? "Adicione ao menos um produto."
+                      : !selectedSeller
+                        ? "Informe um vendedor válido."
                       : hasInvalidItem
                         ? "Revise as quantidades e o estoque."
                         : paymentMethod === ""
@@ -1322,6 +1424,14 @@ export function NewSalePage() {
                   </dt>
                   <dd className="mt-1 font-bold text-slate-700">
                     {selectedCustomer?.name ?? "Sem cliente identificado"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">
+                    Vendedor
+                  </dt>
+                  <dd className="mt-1 font-bold text-slate-700">
+                    {selectedSeller?.name}
                   </dd>
                 </div>
                 <div>

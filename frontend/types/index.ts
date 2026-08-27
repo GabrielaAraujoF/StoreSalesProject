@@ -12,6 +12,14 @@ export interface Product {
   stock: number;
 }
 
+export interface Seller {
+  id: number;
+  seller_number: number;
+  name: string;
+  email: string;
+  active: boolean;
+}
+
 export type PaymentMethod =
   | "cash"
   | "credit_card"
@@ -30,6 +38,7 @@ export interface SaleItem {
 export interface Sale {
   id: number;
   customer: Customer | null;
+  seller: Pick<Seller, "id" | "seller_number" | "name"> | null;
   payment_method: string;
   total: string;
   created_at: string;
@@ -50,6 +59,7 @@ export interface ProductInput {
 
 export interface SaleInput {
   customer_id?: number | null;
+  seller_id: number;
   payment_method: PaymentMethod;
   items: Array<{
     product_id: number;
@@ -67,4 +77,8 @@ export interface ProductListResponse {
 
 export interface SaleListResponse {
   sales: Sale[];
+}
+
+export interface SellerListResponse {
+  sellers: Seller[];
 }
