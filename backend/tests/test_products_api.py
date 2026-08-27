@@ -129,3 +129,63 @@ def test_reject_invalid_product_data(client, payload):
       response = client.post("/api/products/", json=payload)
 
       assert response.status_code == 400
+
+def test_patch_product_updates_only_informed_fields(client):
+      created = create_product(client).get_json()
+
+      response = client.patch(
+          f"/api/products/{created['id']}",
+          json={"price": "21.50", "stock": 8},
+      )
+
+      assert response.status_code == 200
+      product = response.get_json()
+      assert product == {
+          **created,
+          "price": "21.50",
+          "stock": 8,
+      }
+
+
+@pytest.mark.parametrize(
+      "payload",
+      [
+          {},
+          {"unknown": "value"},
+          {"stock": -1},
+          {"name": "   "},
+      ],
+)
+def test_reject_invalid_product_patch(client, payload):
+      created = create_product(client).get_json()
+
+      response = client.patch(
+          f"/api/products/{created['id']}",
+          json=payload,
+      )
+
+      assert response.status_code == 400
+
+
+def test_patch_nonexistent_product(client):
+      response = client.patch("/api/products/99999", json={"stock": 1})
+
+      assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+      "field",
+      ["name", "category"],
+)
+def test_reject_product_fields_over_database_limit(client, field):
+      payload = {
+          "name": "Café",
+          "category": "Alimentos",
+          "price": "18.90",
+          "stock": 20,
+      }
+      payload[field] = "x" * 101
+
+      response = client.post("/api/products/", json=payload)
+
+      assert response.status_code == 400

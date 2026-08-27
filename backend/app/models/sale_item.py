@@ -17,8 +17,14 @@ class SaleItem(db.Model):
         db.ForeignKey("products.id"),
         nullable=False,
     )
-    quantity = db.Column(db.Integer, nullable=False)
-    unit_price = db.Column(db.Numeric(10, 2), nullable=False)
+    quantity = db.Column(
+        db.Integer, nullable=False
+    )
+    
+    unit_price = db.Column(
+        db.Numeric(10, 2), nullable=False
+    )
+    
     subtotal = db.Column(
         db.Numeric(10, 2),
         nullable=False,

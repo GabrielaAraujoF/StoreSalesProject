@@ -145,3 +145,16 @@ def test_get_customer_by_phone_errors(client, query_string, expected_status):
     )
 
     assert response.status_code == expected_status
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"name": "x" * 101, "phone": "11999999999"},
+        {"name": "Gabriel", "phone": "1" * 21},
+    ],
+)
+def test_reject_customer_fields_over_database_limit(client, payload):
+    response = client.post("/api/customers/", json=payload)
+
+    assert response.status_code == 400

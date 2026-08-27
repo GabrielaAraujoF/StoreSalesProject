@@ -13,6 +13,7 @@ from app.api.products import products_bp
 from app.api.sales import sales_bp
 from app.api.customers import customers_bp
 from app.api.sellers import sellers_bp
+from app.api.docs import docs_bp
 
 def create_app(config_name=None):
     app = Flask(__name__)
@@ -27,5 +28,6 @@ def create_app(config_name=None):
     app.register_blueprint(sales_bp)
     app.register_blueprint(customers_bp)
     app.register_blueprint(sellers_bp)
+    app.register_blueprint(docs_bp)
 
     return app

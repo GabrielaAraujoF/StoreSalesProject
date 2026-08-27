@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from flask import Blueprint, request
+from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.database.db import db
@@ -198,9 +199,20 @@ def create_sale():
             }, 404
 
         quantity = item_data["quantity"]
-        available_stock = product.stock or 0
-        if available_stock < quantity:
+        stock_update = db.session.execute(
+            update(Product)
+            .where(
+                Product.id == product.id,
+                Product.stock >= quantity,
+            )
+            .values(stock=Product.stock - quantity)
+            .execution_options(synchronize_session=False)
+        )
+
+        if stock_update.rowcount != 1:
             db.session.rollback()
+            current_product = db.session.get(Product, product.id)
+            available_stock = current_product.stock or 0
             return {
                 "error": f"Estoque insuficiente para o produto {product.id}.",
                 "available_stock": available_stock,
@@ -208,7 +220,6 @@ def create_sale():
 
         unit_price = product.price
         subtotal = unit_price * quantity
-        product.stock = available_stock - quantity
         total += subtotal
 
         sale.items.append(SaleItem(
