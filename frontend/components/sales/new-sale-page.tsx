@@ -9,11 +9,13 @@ import { ApiError } from "@/lib/api";
 import { getCustomers } from "@/services/customers";
 import { getProducts } from "@/services/products";
 import { createSale } from "@/services/sales";
+import { getActiveSellers } from "@/services/sellers";
 import type {
   Customer,
   PaymentMethod,
   Product,
   SaleInput,
+  SellerSummary,
 } from "@/types";
 
 type CartItem = {
@@ -187,16 +189,20 @@ function RemoveButton({
 export function NewSalePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [sellers, setSellers] = useState<SellerSummary[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
+  const [isLoadingSellers, setIsLoadingSellers] = useState(true);
   const [productLoadError, setProductLoadError] = useState<string | null>(null);
   const [customerLoadError, setCustomerLoadError] = useState<string | null>(null);
+  const [sellerLoadError, setSellerLoadError] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [isCustomerSearchOpen, setIsCustomerSearchOpen] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState("");
+  const [sellerId, setSellerId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -277,8 +283,30 @@ export function NewSalePage() {
       }
     }
 
+    async function loadSellers() {
+      setIsLoadingSellers(true);
+      setSellerLoadError(null);
+
+      try {
+        setSellers(await getActiveSellers(controller.signal));
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        setSellerLoadError(
+          getErrorMessage(error, "Não foi possível carregar os vendedores."),
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingSellers(false);
+        }
+      }
+    }
+
     void loadProducts();
     void loadCustomers();
+    void loadSellers();
 
     return () => controller.abort();
   }, []);
@@ -304,6 +332,11 @@ export function NewSalePage() {
     () =>
       customers.find((customer) => customer.id === Number(customerId)) ?? null,
     [customerId, customers],
+  );
+
+  const selectedSeller = useMemo(
+    () => sellers.find((seller) => seller.id === Number(sellerId)) ?? null,
+    [sellerId, sellers],
   );
 
   const filteredCustomers = useMemo(() => {
@@ -367,6 +400,7 @@ export function NewSalePage() {
   );
   const canFinalize =
     cartItems.length > 0 &&
+    selectedSeller !== null &&
     paymentMethod !== "" &&
     !hasInvalidItem &&
     !isSubmitting;
@@ -388,6 +422,29 @@ export function NewSalePage() {
       );
     } finally {
       setIsLoadingCustomers(false);
+    }
+  }
+
+  async function refreshSellers() {
+    setIsLoadingSellers(true);
+    setSellerLoadError(null);
+
+    try {
+      const refreshedSellers = await getActiveSellers();
+      setSellers(refreshedSellers);
+
+      if (
+        sellerId &&
+        !refreshedSellers.some((seller) => seller.id === Number(sellerId))
+      ) {
+        setSellerId("");
+      }
+    } catch (error) {
+      setSellerLoadError(
+        getErrorMessage(error, "Não foi possível carregar os vendedores."),
+      );
+    } finally {
+      setIsLoadingSellers(false);
     }
   }
 
@@ -586,12 +643,13 @@ export function NewSalePage() {
   }
 
   async function finalizeSale() {
-    if (submissionLockRef.current || !canFinalize) {
+    if (submissionLockRef.current || !canFinalize || !selectedSeller) {
       return;
     }
 
     const payload: SaleInput = {
       customer_id: customerId ? Number(customerId) : null,
+      seller_id: selectedSeller.id,
       payment_method: paymentMethod,
       items: cartItems.map((item) => ({
         product_id: item.productId,
@@ -609,6 +667,7 @@ export function NewSalePage() {
       setCartItems([]);
       setCustomerId("");
       setCustomerSearch("");
+      setSellerId("");
       setPaymentMethod("");
       setProductSearch("");
       setSelectionError(null);
@@ -618,10 +677,21 @@ export function NewSalePage() {
       );
       await refreshProducts();
     } catch (error) {
-      const isStockConflict = error instanceof ApiError && error.status === 409;
+      const isStockConflict =
+        error instanceof ApiError &&
+        error.status === 409 &&
+        error.message.toLocaleLowerCase("pt-BR").includes("estoque");
+      const isSellerConflict =
+        error instanceof ApiError &&
+        error.status === 409 &&
+        error.message.toLocaleLowerCase("pt-BR").includes("vendedor");
 
       if (isStockConflict) {
         await refreshProducts();
+      }
+
+      if (isSellerConflict) {
+        await refreshSellers();
       }
 
       setIsConfirmationOpen(false);
@@ -866,16 +936,59 @@ export function NewSalePage() {
                 htmlFor="sale-seller"
                 className="text-sm font-bold text-slate-700"
               >
-                Vendedor
+                Vendedor <span className="text-red-600">*</span>
               </label>
-              <input
+              <select
                 id="sale-seller"
-                disabled
-                value="Vendedor — integração futura"
-                aria-label="Vendedor — integração futura"
+                value={sellerId}
+                onChange={(event) => {
+                  setSellerId(event.target.value);
+                  setSubmitError(null);
+                }}
+                disabled={isLoadingSellers || isSubmitting}
+                aria-invalid={Boolean(sellerLoadError)}
+                aria-describedby="sale-seller-feedback"
                 className={`${fieldClasses()} mt-2`}
-                readOnly
-              />
+              >
+                <option value="">
+                  {isLoadingSellers
+                    ? "Carregando vendedores..."
+                    : sellers.length > 0
+                      ? "Selecione um vendedor"
+                      : "Nenhum vendedor ativo"}
+                </option>
+                {sellers.map((seller) => (
+                  <option key={seller.id} value={seller.id}>
+                    {String(seller.seller_number).padStart(3, "0")} — {seller.name}
+                  </option>
+                ))}
+              </select>
+              <div
+                id="sale-seller-feedback"
+                className="mt-1.5 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+              >
+                {sellerLoadError ? (
+                  <>
+                    <p className="font-medium text-red-600">{sellerLoadError}</p>
+                    <button
+                      type="button"
+                      onClick={() => void refreshSellers()}
+                      disabled={isLoadingSellers}
+                      className="font-bold text-emerald-800 underline decoration-emerald-300 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-500/30"
+                    >
+                      Tentar novamente
+                    </button>
+                  </>
+                ) : selectedSeller ? (
+                  <p className="font-medium text-emerald-800">
+                    Vendedor nº {String(selectedSeller.seller_number).padStart(3, "0")}
+                  </p>
+                ) : (
+                  <p className="font-medium text-slate-500">
+                    Apenas vendedores ativos podem realizar vendas.
+                  </p>
+                )}
+              </div>
             </div>
           </section>
 
@@ -1268,11 +1381,13 @@ export function NewSalePage() {
                   >
                     {cartItems.length === 0
                       ? "Adicione ao menos um produto."
-                      : hasInvalidItem
-                        ? "Revise as quantidades e o estoque."
-                        : paymentMethod === ""
-                          ? "Selecione a forma de pagamento."
-                          : "Aguarde a operação atual."}
+                      : !selectedSeller
+                        ? "Selecione um vendedor ativo."
+                        : hasInvalidItem
+                          ? "Revise as quantidades e o estoque."
+                          : paymentMethod === ""
+                            ? "Selecione a forma de pagamento."
+                            : "Aguarde a operação atual."}
                   </p>
                 )}
               </div>
@@ -1322,6 +1437,16 @@ export function NewSalePage() {
                   </dt>
                   <dd className="mt-1 font-bold text-slate-700">
                     {selectedCustomer?.name ?? "Sem cliente identificado"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-[0.1em] text-slate-400">
+                    Vendedor
+                  </dt>
+                  <dd className="mt-1 font-bold text-slate-700">
+                    {selectedSeller
+                      ? `${selectedSeller.name} · Nº ${String(selectedSeller.seller_number).padStart(3, "0")}`
+                      : "Não selecionado"}
                   </dd>
                 </div>
                 <div>
