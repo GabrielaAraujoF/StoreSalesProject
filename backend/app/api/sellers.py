@@ -3,6 +3,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.database.db import db
 from app.models.seller import Seller
+from app.auth.decorators import admin_required
+
 
 sellers_bp = Blueprint(
     "sellers",
@@ -19,6 +21,14 @@ def seller_to_dict(seller):
         "name": seller.name,
         "email" : seller.email,
         "active" : seller.active
+    }
+
+
+def active_seller_to_dict(seller):
+    return {
+        "id": seller.id,
+        "seller_number": seller.seller_number,
+        "name": seller.name,
     }
 
 def validate_seller_data(data, required_fields=None):
@@ -105,6 +115,53 @@ def validate_seller_data(data, required_fields=None):
 
     return validated_data, None
 
+def seller_value_is_in_use(column, value, *, ignored_seller_id=None):
+    query = Seller.query.filter(column == value)
+
+    if ignored_seller_id is not None:
+        query = query.filter(Seller.id != ignored_seller_id)
+
+    return query.first() is not None
+
+
+def commit_seller_changes(seller):
+    seller_id = seller.id
+    email = seller.email
+    seller_number = seller.seller_number
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+
+        if seller_value_is_in_use(
+            Seller.email,
+            email,
+            ignored_seller_id=seller_id,
+        ):
+            return {
+                "error": "Já existe um vendedor com este e-mail.",
+                "code": "seller_email_conflict",
+            }, 409
+
+        if seller_value_is_in_use(
+            Seller.seller_number,
+            seller_number,
+            ignored_seller_id=seller_id,
+        ):
+            return {
+                "error": "Já existe um vendedor com este número.",
+                "code": "seller_number_conflict",
+            }, 409
+
+        return {
+            "error": "Não foi possível salvar o vendedor devido a um conflito de dados.",
+            "code": "seller_integrity_conflict",
+        }, 409
+
+    return None
+
+
 def commit_or_error(message):
     try:
         db.session.commit()
@@ -116,6 +173,7 @@ def commit_or_error(message):
 
 
 @sellers_bp.post("/")
+@admin_required
 def create_seller():
     validated_data, error = validate_seller_data(
         request.get_json(silent=True),
@@ -138,9 +196,7 @@ def create_seller():
     )
     db.session.add(seller)
 
-    error = commit_or_error(
-        "Já existe um vendedor com este email"
-    )
+    error = commit_seller_changes(seller)
 
     if error:
         return error
@@ -148,7 +204,21 @@ def create_seller():
     return seller_to_dict(seller), 201
 
 
+@sellers_bp.get("/active")
+def list_active_sellers():
+    sellers = (
+        Seller.query
+        .filter_by(active=True)
+        .order_by(Seller.seller_number)
+        .all()
+    )
+    return {
+        "sellers": [active_seller_to_dict(seller) for seller in sellers]
+    }
+
+
 @sellers_bp.get("/")
+@admin_required
 def list_sellers():
     sellers = Seller.query.order_by(Seller.id).all()
     return {"sellers": [
@@ -159,6 +229,7 @@ def list_sellers():
 
 
 @sellers_bp.get("/<int:seller_id>")
+@admin_required
 def get_seller(seller_id):
     seller = db.session.get(Seller, seller_id)
 
@@ -169,6 +240,7 @@ def get_seller(seller_id):
 
 
 @sellers_bp.patch("/<int:seller_id>")
+@admin_required
 def patch_seller(seller_id):
     seller = db.session.get(Seller, seller_id)
 
@@ -185,9 +257,7 @@ def patch_seller(seller_id):
     for field, value in validated_data.items():
         setattr(seller, field, value)
 
-    error = commit_or_error(
-        "Já existe um vendedor com este e-mail."
-    )
+    error = commit_seller_changes(seller)
 
     if error:
         return error
@@ -198,6 +268,7 @@ def patch_seller(seller_id):
 
 
 @sellers_bp.put("/<int:seller_id>")
+@admin_required
 def update_seller(seller_id):
     seller = db.session.get(Seller, seller_id)
 
@@ -216,9 +287,7 @@ def update_seller(seller_id):
     seller.email = validated_data["email"]
     seller.active = validated_data["active"]
 
-    error = commit_or_error(
-        "Já existe um vendedor com este e-mail."
-    )
+    error = commit_seller_changes(seller)
 
     if error:
         return error
@@ -226,6 +295,7 @@ def update_seller(seller_id):
     return seller_to_dict(seller)
 
 @sellers_bp.delete("/<int:seller_id>")
+@admin_required
 def delete_seller(seller_id):
     seller = db.session.get(Seller, seller_id)
 

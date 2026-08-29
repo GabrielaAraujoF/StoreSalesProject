@@ -15,7 +15,7 @@ import type {
   PaymentMethod,
   Product,
   SaleInput,
-  Seller,
+  SellerSummary,
 } from "@/types";
 
 type CartItem = {
@@ -200,7 +200,7 @@ export function NewSalePage() {
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState("");
   const [sellerNumber, setSellerNumber] = useState("");
-  const [selectedSeller, setSelectedSeller] = useState<Seller | null>(null);
+  const [selectedSeller, setSelectedSeller] = useState<SellerSummary | null>(null);
   const [sellerLookupError, setSellerLookupError] = useState<string | null>(null);
   const [isLoadingSeller, setIsLoadingSeller] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
@@ -264,8 +264,6 @@ export function NewSalePage() {
 
         if (!seller) {
           setSellerLookupError("Vendedor não encontrado.");
-        } else if (!seller.active) {
-          setSellerLookupError("Vendedor inativo.");
         } else {
           setSelectedSeller(seller);
         }
@@ -684,10 +682,24 @@ export function NewSalePage() {
       );
       await refreshProducts();
     } catch (error) {
-      const isStockConflict = error instanceof ApiError && error.status === 409;
+      const isStockConflict =
+        error instanceof ApiError &&
+        error.status === 409 &&
+        error.message.toLocaleLowerCase("pt-BR").includes("estoque");
+      const isSellerConflict =
+        error instanceof ApiError &&
+        error.status === 409 &&
+        error.message.toLocaleLowerCase("pt-BR").includes("vendedor");
 
       if (isStockConflict) {
         await refreshProducts();
+      }
+
+      if (isSellerConflict) {
+        setSelectedSeller(null);
+        setSellerLookupError(
+          getErrorMessage(error, "O vendedor informado não está disponível."),
+        );
       }
 
       setIsConfirmationOpen(false);
@@ -1431,7 +1443,9 @@ export function NewSalePage() {
                     Vendedor
                   </dt>
                   <dd className="mt-1 font-bold text-slate-700">
-                    {selectedSeller?.name}
+                    {selectedSeller
+                      ? `${selectedSeller.name} · Nº ${String(selectedSeller.seller_number).padStart(3, "0")}`
+                      : "Não selecionado"}
                   </dd>
                 </div>
                 <div>

@@ -36,6 +36,13 @@ const menuItems = [
     href: "/dashboard",
     featured: false,
   },
+  {
+    index: "06",
+    title: "Administração",
+    description: "Gerencie os vendedores e o acesso à operação.",
+    href: "/admin",
+    featured: false,
+  },
 ] as const;
 
 export default function Home() {
