@@ -9,7 +9,7 @@ import { ApiError } from "@/lib/api";
 import { getCustomers } from "@/services/customers";
 import { getProducts } from "@/services/products";
 import { createSale } from "@/services/sales";
-import { getActiveSellers } from "@/services/sellers";
+import { getSellerByNumber } from "@/services/sellers";
 import type {
   Customer,
   PaymentMethod,
@@ -62,12 +62,12 @@ function priceToCents(price: string) {
 function searchable(value: string) {
   return value
     .normalize("NFD")
-    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("pt-BR");
 }
 
 function digitsOnly(value: string | null) {
-  return (value ?? "").replace(/\\D/g, "");
+  return (value ?? "").replace(/\D/g, "");
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -189,20 +189,20 @@ function RemoveButton({
 export function NewSalePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [sellers, setSellers] = useState<SellerSummary[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
-  const [isLoadingSellers, setIsLoadingSellers] = useState(true);
   const [productLoadError, setProductLoadError] = useState<string | null>(null);
   const [customerLoadError, setCustomerLoadError] = useState<string | null>(null);
-  const [sellerLoadError, setSellerLoadError] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [isCustomerSearchOpen, setIsCustomerSearchOpen] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState("");
-  const [sellerId, setSellerId] = useState("");
+  const [sellerNumber, setSellerNumber] = useState("");
+  const [selectedSeller, setSelectedSeller] = useState<SellerSummary | null>(null);
+  const [sellerLookupError, setSellerLookupError] = useState<string | null>(null);
+  const [isLoadingSeller, setIsLoadingSeller] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -234,6 +234,59 @@ export function NewSalePage() {
     document.addEventListener("pointerdown", closeSearchResults);
     return () => document.removeEventListener("pointerdown", closeSearchResults);
   }, []);
+
+  useEffect(() => {
+    const normalizedSellerNumber = sellerNumber.trim();
+
+    if (!normalizedSellerNumber) {
+      return;
+    }
+
+    const numericSellerNumber = Number(normalizedSellerNumber);
+    if (
+      !Number.isInteger(numericSellerNumber) ||
+      numericSellerNumber <= 0
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setIsLoadingSeller(true);
+      setSelectedSeller(null);
+      setSellerLookupError(null);
+
+      try {
+        const seller = await getSellerByNumber(
+          numericSellerNumber,
+          controller.signal,
+        );
+
+        if (!seller) {
+          setSellerLookupError("Vendedor não encontrado.");
+        } else {
+          setSelectedSeller(seller);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        setSellerLookupError(
+          getErrorMessage(error, "Não foi possível localizar o vendedor."),
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingSeller(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [sellerNumber]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -283,30 +336,8 @@ export function NewSalePage() {
       }
     }
 
-    async function loadSellers() {
-      setIsLoadingSellers(true);
-      setSellerLoadError(null);
-
-      try {
-        setSellers(await getActiveSellers(controller.signal));
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-
-        setSellerLoadError(
-          getErrorMessage(error, "Não foi possível carregar os vendedores."),
-        );
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoadingSellers(false);
-        }
-      }
-    }
-
     void loadProducts();
     void loadCustomers();
-    void loadSellers();
 
     return () => controller.abort();
   }, []);
@@ -334,16 +365,11 @@ export function NewSalePage() {
     [customerId, customers],
   );
 
-  const selectedSeller = useMemo(
-    () => sellers.find((seller) => seller.id === Number(sellerId)) ?? null,
-    [sellerId, sellers],
-  );
-
   const filteredCustomers = useMemo(() => {
     const term = customerSearch.trim();
 
     if (!term) {
-      return [];
+      return customers.slice(0, 6);
     }
 
     const textTerm = searchable(term);
@@ -422,29 +448,6 @@ export function NewSalePage() {
       );
     } finally {
       setIsLoadingCustomers(false);
-    }
-  }
-
-  async function refreshSellers() {
-    setIsLoadingSellers(true);
-    setSellerLoadError(null);
-
-    try {
-      const refreshedSellers = await getActiveSellers();
-      setSellers(refreshedSellers);
-
-      if (
-        sellerId &&
-        !refreshedSellers.some((seller) => seller.id === Number(sellerId))
-      ) {
-        setSellerId("");
-      }
-    } catch (error) {
-      setSellerLoadError(
-        getErrorMessage(error, "Não foi possível carregar os vendedores."),
-      );
-    } finally {
-      setIsLoadingSellers(false);
     }
   }
 
@@ -550,7 +553,7 @@ export function NewSalePage() {
   }
 
   function updateItemQuantity(productId: number, value: string) {
-    if (!/^\\d*$/.test(value)) {
+    if (!/^\d*$/.test(value)) {
       return;
     }
 
@@ -667,7 +670,9 @@ export function NewSalePage() {
       setCartItems([]);
       setCustomerId("");
       setCustomerSearch("");
-      setSellerId("");
+      setSellerNumber("");
+      setSelectedSeller(null);
+      setSellerLookupError(null);
       setPaymentMethod("");
       setProductSearch("");
       setSelectionError(null);
@@ -691,7 +696,10 @@ export function NewSalePage() {
       }
 
       if (isSellerConflict) {
-        await refreshSellers();
+        setSelectedSeller(null);
+        setSellerLookupError(
+          getErrorMessage(error, "O vendedor informado não está disponível."),
+        );
       }
 
       setIsConfirmationOpen(false);
@@ -856,9 +864,7 @@ export function NewSalePage() {
                   autoComplete="off"
                   role="combobox"
                   aria-autocomplete="list"
-                  aria-expanded={
-                    isCustomerSearchOpen && customerSearch.trim().length > 0
-                  }
+                  aria-expanded={isCustomerSearchOpen}
                   aria-controls="customer-results"
                   className={`${fieldClasses()} pl-10 pr-10`}
                 />
@@ -873,7 +879,7 @@ export function NewSalePage() {
                 )}
               </div>
 
-              {isCustomerSearchOpen && customerSearch.trim().length > 0 && (
+              {isCustomerSearchOpen && (
                 <div
                   id="customer-results"
                   className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
@@ -936,59 +942,52 @@ export function NewSalePage() {
                 htmlFor="sale-seller"
                 className="text-sm font-bold text-slate-700"
               >
-                Vendedor <span className="text-red-600">*</span>
+                Número do vendedor <span className="text-red-600">*</span>
               </label>
-              <select
+              <input
                 id="sale-seller"
-                value={sellerId}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={sellerNumber}
                 onChange={(event) => {
-                  setSellerId(event.target.value);
-                  setSubmitError(null);
+                  const value = event.target.value;
+                  if (/^\d*$/.test(value)) {
+                    setSellerNumber(value);
+                    setSelectedSeller(null);
+                    setSellerLookupError(
+                      value && Number(value) <= 0
+                        ? "Informe um número de vendedor válido."
+                        : null,
+                    );
+                    setIsLoadingSeller(false);
+                    setSubmitError(null);
+                  }
                 }}
-                disabled={isLoadingSellers || isSubmitting}
-                aria-invalid={Boolean(sellerLoadError)}
+                disabled={isSubmitting}
+                placeholder="Ex.: 102"
+                aria-invalid={Boolean(sellerLookupError)}
                 aria-describedby="sale-seller-feedback"
                 className={`${fieldClasses()} mt-2`}
-              >
-                <option value="">
-                  {isLoadingSellers
-                    ? "Carregando vendedores..."
-                    : sellers.length > 0
-                      ? "Selecione um vendedor"
-                      : "Nenhum vendedor ativo"}
-                </option>
-                {sellers.map((seller) => (
-                  <option key={seller.id} value={seller.id}>
-                    {String(seller.seller_number).padStart(3, "0")} — {seller.name}
-                  </option>
-                ))}
-              </select>
-              <div
+              />
+              <p
                 id="sale-seller-feedback"
-                className="mt-1.5 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+                className={`mt-1.5 text-xs font-medium ${
+                  sellerLookupError
+                    ? "text-red-600"
+                    : selectedSeller
+                      ? "text-emerald-800"
+                      : "text-slate-500"
+                }`}
               >
-                {sellerLoadError ? (
-                  <>
-                    <p className="font-medium text-red-600">{sellerLoadError}</p>
-                    <button
-                      type="button"
-                      onClick={() => void refreshSellers()}
-                      disabled={isLoadingSellers}
-                      className="font-bold text-emerald-800 underline decoration-emerald-300 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-500/30"
-                    >
-                      Tentar novamente
-                    </button>
-                  </>
-                ) : selectedSeller ? (
-                  <p className="font-medium text-emerald-800">
-                    Vendedor nº {String(selectedSeller.seller_number).padStart(3, "0")}
-                  </p>
-                ) : (
-                  <p className="font-medium text-slate-500">
-                    Apenas vendedores ativos podem realizar vendas.
-                  </p>
-                )}
-              </div>
+                {isLoadingSeller
+                  ? "Localizando vendedor..."
+                  : sellerLookupError
+                    ? sellerLookupError
+                    : selectedSeller
+                      ? `Vendedor: ${selectedSeller.name}`
+                      : "Informe o número para identificar o vendedor."}
+              </p>
             </div>
           </section>
 
@@ -1382,12 +1381,12 @@ export function NewSalePage() {
                     {cartItems.length === 0
                       ? "Adicione ao menos um produto."
                       : !selectedSeller
-                        ? "Selecione um vendedor ativo."
-                        : hasInvalidItem
-                          ? "Revise as quantidades e o estoque."
-                          : paymentMethod === ""
-                            ? "Selecione a forma de pagamento."
-                            : "Aguarde a operação atual."}
+                        ? "Informe um vendedor válido."
+                      : hasInvalidItem
+                        ? "Revise as quantidades e o estoque."
+                        : paymentMethod === ""
+                          ? "Selecione a forma de pagamento."
+                          : "Aguarde a operação atual."}
                   </p>
                 )}
               </div>

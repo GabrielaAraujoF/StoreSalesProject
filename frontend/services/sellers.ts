@@ -46,3 +46,13 @@ export function updateSeller(
     body: JSON.stringify(changes),
   });
 }
+
+export async function getSellerByNumber(
+  sellerNumber: number,
+  signal?: AbortSignal,
+): Promise<SellerSummary | null> {
+  const sellers = await getActiveSellers(signal);
+  return (
+    sellers.find((seller) => seller.seller_number === sellerNumber) ?? null
+  );
+}

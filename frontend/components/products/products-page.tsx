@@ -297,6 +297,9 @@ export function ProductsPage() {
 
     try {
       const updatedProduct = await updateProduct(stockProduct.id, {
+        name: stockProduct.name,
+        category: stockProduct.category,
+        price: stockProduct.price,
         stock: newStock,
       });
       setProducts((current) =>
@@ -391,7 +394,7 @@ export function ProductsPage() {
 
     try {
       const savedProduct = editingProduct
-        ? await updateProduct(editingProduct.id, changes ?? {})
+        ? await updateProduct(editingProduct.id, productInput)
         : await createProduct(productInput);
 
       setProducts((current) => {

@@ -54,6 +54,7 @@ export async function apiRequest<T>(
 
   const response = await fetch(path, {
     credentials: "same-origin",
+    cache: "no-store",
     ...options,
     headers,
   });
