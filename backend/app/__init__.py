@@ -20,6 +20,7 @@ from app.api.customers import customers_bp
 from app.api.sellers import sellers_bp
 from app.api.docs import docs_bp
 from app.api.auth import auth_bp
+from app.api.dashboard import dashboard_bp
 from app.commands import create_admin_command
 
 jwt = JWTManager()
@@ -72,6 +73,7 @@ def create_app(config_name=None):
     app.register_blueprint(sellers_bp)
     app.register_blueprint(docs_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(dashboard_bp)
     app.cli.add_command(create_admin_command)
 
     ensure_initial_admin(app)

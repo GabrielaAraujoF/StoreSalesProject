@@ -1,6 +1,9 @@
+from datetime import datetime
+
 import pytest
 
 from app.database.db import db
+from app.models.sale import Sale
 from app.models.seller import Seller
 
 
@@ -398,3 +401,187 @@ def test_deleting_customer_preserves_sale_without_customer(client):
       assert delete_response.status_code == 204
       assert sale_response.status_code == 200
       assert sale_response.get_json()["customer"] is None
+
+
+def test_list_sales_filters_by_brazilian_date_seller_and_payment(client):
+    ana = create_seller()
+    bia = Seller(
+        name="Bia Souza",
+        seller_number=205,
+        email="bia@example.com",
+        active=True,
+    )
+    db.session.add(bia)
+    db.session.commit()
+
+    product = create_product(client, price="10.50", stock=10)
+    august_sale = create_sale(
+        client,
+        product["id"],
+        seller_id=ana.id,
+        payment_method="cash",
+    ).get_json()
+    ana_sale = create_sale(
+        client,
+        product["id"],
+        seller_id=ana.id,
+        payment_method="pix",
+    ).get_json()
+    bia_sale = create_sale(
+        client,
+        product["id"],
+        seller_id=bia.id,
+        payment_method="pix",
+    ).get_json()
+
+    # UTC instants around midnight in Sao Paulo. The first sale belongs to
+    # 31/08 locally, even though its UTC date is already 01/09.
+    db.session.get(Sale, august_sale["id"]).created_at = datetime(2026, 9, 1, 2, 30)
+    db.session.get(Sale, ana_sale["id"]).created_at = datetime(2026, 9, 1, 3, 30)
+    db.session.get(Sale, bia_sale["id"]).created_at = datetime(2026, 9, 1, 13, 0)
+    bia.active = False
+    db.session.commit()
+
+    response = client.get(
+        "/api/sales/",
+        query_string={
+            "date_from": "2026-09-01",
+            "date_to": "2026-09-01",
+            "seller": "Bia",
+            "payment_method": "pix",
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.get_json()
+    assert [sale["id"] for sale in result["sales"]] == [bia_sale["id"]]
+    assert result["sales"][0]["created_at"].endswith("Z")
+    assert result["summary"] == {
+        "sales_count": 1,
+        "total_amount": "10.50",
+    }
+
+    seller_number_response = client.get(
+        "/api/sales/",
+        query_string={"seller": "205"},
+    )
+    assert [sale["id"] for sale in seller_number_response.get_json()["sales"]] == [
+        bia_sale["id"]
+    ]
+
+    sellers_response = client.get("/api/sales/filter-sellers")
+    assert sellers_response.status_code == 200
+    assert sellers_response.get_json()["sellers"] == [
+        {
+            "id": ana.id,
+            "seller_number": 102,
+            "name": "Ana",
+            "active": True,
+        },
+        {
+            "id": bia.id,
+            "seller_number": 205,
+            "name": "Bia Souza",
+            "active": False,
+        },
+    ]
+
+
+def test_list_sales_paginates_newest_first_and_summarizes_full_result(client):
+    product = create_product(client, price="10.50", stock=10)
+    sale_ids = [
+        create_sale(client, product["id"]).get_json()["id"]
+        for _ in range(3)
+    ]
+
+    for day, sale_id in enumerate(sale_ids, start=1):
+        db.session.get(Sale, sale_id).created_at = datetime(2026, 8, day, 15, 0)
+    db.session.commit()
+
+    unpaginated_result = client.get("/api/sales/").get_json()
+    first_page = client.get(
+        "/api/sales/",
+        query_string={"page": 1, "per_page": 2},
+    ).get_json()
+    second_page = client.get(
+        "/api/sales/",
+        query_string={"page": 2, "per_page": 2},
+    ).get_json()
+
+    assert [sale["id"] for sale in unpaginated_result["sales"]] == list(
+        reversed(sale_ids)
+    )
+    assert unpaginated_result["pagination"]["per_page"] == 3
+    assert [sale["id"] for sale in first_page["sales"]] == list(reversed(sale_ids[1:]))
+    assert [sale["id"] for sale in second_page["sales"]] == [sale_ids[0]]
+    assert first_page["pagination"] == {
+        "page": 1,
+        "per_page": 2,
+        "total": 3,
+        "total_pages": 2,
+    }
+    assert first_page["summary"] == {
+        "sales_count": 3,
+        "total_amount": "31.50",
+    }
+
+
+def test_credit_card_filter_includes_legacy_card_sales(client):
+    seller = create_seller()
+    product = create_product(client)
+    sale = create_sale(
+        client,
+        product["id"],
+        seller_id=seller.id,
+        payment_method="cash",
+    ).get_json()
+
+    stored_sale = db.session.get(Sale, sale["id"])
+    stored_sale.payment_method = "card"
+    db.session.commit()
+
+    response = client.get(
+        "/api/sales/",
+        query_string={"payment_method": "credit_card"},
+    )
+
+    assert response.status_code == 200
+    result = response.get_json()
+    assert result["summary"]["sales_count"] == 1
+    assert result["sales"][0]["payment_method"] == "credit_card"
+
+
+@pytest.mark.parametrize(
+    ("query_string", "expected_error"),
+    [
+        ({"page": "zero"}, "O parâmetro 'page' deve ser um inteiro positivo."),
+        ({"per_page": 101}, "O parâmetro 'per_page' deve ser um inteiro positivo de até 100."),
+        ({"date_from": "01/09/2026"}, "O parâmetro 'date_from' deve usar o formato AAAA-MM-DD."),
+        (
+            {"date_from": "2026-09-02", "date_to": "2026-09-01"},
+            "A data inicial não pode ser posterior à data final.",
+        ),
+        ({"seller_id": "abc"}, "O parâmetro 'seller_id' deve ser um inteiro positivo."),
+    ],
+)
+def test_list_sales_rejects_invalid_filters(client, query_string, expected_error):
+    response = client.get("/api/sales/", query_string=query_string)
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": expected_error}
+
+
+def test_sale_details_keep_recorded_prices_after_product_price_changes(client):
+    product = create_product(client, price="10.50", stock=10)
+    sale = create_sale(client, product["id"]).get_json()
+
+    update_response = client.patch(
+        f"/api/products/{product['id']}",
+        json={"price": "25.00"},
+    )
+    detail_response = client.get(f"/api/sales/{sale['id']}")
+
+    assert update_response.status_code == 200
+    assert detail_response.status_code == 200
+    assert detail_response.get_json()["items"][0]["unit_price"] == "10.50"
+    assert detail_response.get_json()["items"][0]["subtotal"] == "10.50"
