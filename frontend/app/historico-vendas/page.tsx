@@ -7,6 +7,30 @@ export const metadata: Metadata = {
   description: "Consulte as vendas registradas no StoreSales.",
 };
 
-export default function HistoricoVendasPage() {
-  return <SalesHistoryPage />;
+type HistorySearchParams = Promise<{
+  date_from?: string | string[];
+  date_to?: string | string[];
+  seller?: string | string[];
+}>;
+
+function firstValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function HistoricoVendasPage({
+  searchParams,
+}: {
+  searchParams: HistorySearchParams;
+}) {
+  const query = await searchParams;
+
+  return (
+    <SalesHistoryPage
+      initialQuery={{
+        dateFrom: firstValue(query.date_from),
+        dateTo: firstValue(query.date_to),
+        seller: firstValue(query.seller),
+      }}
+    />
+  );
 }

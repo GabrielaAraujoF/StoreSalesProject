@@ -1,10 +1,12 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import type { Metadata } from "next";
 
-export default function DashboardPage() {
-  return (
-    <PlaceholderPage
-      title="Dashboard"
-      description="Os indicadores e resultados do seu negócio serão exibidos nesta área."
-    />
-  );
+import { DashboardPage } from "@/components/dashboard/dashboard-page";
+
+export const metadata: Metadata = {
+  title: "Dashboard | StoreSales",
+  description: "Acompanhe vendas, produtos e desempenho da equipe no StoreSales.",
+};
+
+export default function DashboardRoute() {
+  return <DashboardPage />;
 }

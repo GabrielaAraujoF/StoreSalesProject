@@ -56,6 +56,32 @@ export interface Sale {
   items: SaleItem[];
 }
 
+export interface SaleFilterSeller extends SellerSummary {
+  active: boolean;
+}
+
+export interface SaleFilters {
+  page?: number;
+  perPage?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  seller?: string;
+  sellerId?: number;
+  paymentMethod?: PaymentMethod | "";
+}
+
+export interface SalePagination {
+  page: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface SaleSummary {
+  sales_count: number;
+  total_amount: string;
+}
+
 export interface CustomerInput {
   name: string;
   phone?: string | null;
@@ -116,4 +142,70 @@ export interface AccountResponse {
 
 export interface SaleListResponse {
   sales: Sale[];
+  pagination: SalePagination;
+  summary: SaleSummary;
+}
+
+export interface SaleFilterSellerListResponse {
+  sellers: SaleFilterSeller[];
+}
+
+export interface DashboardFilters {
+  dateFrom: string;
+  dateTo: string;
+  seller?: string;
+  sellerId?: number;
+}
+
+export interface DashboardSummary {
+  total_amount: string;
+  sales_count: number;
+  average_ticket: string;
+  units_sold: number;
+}
+
+export interface DashboardEvolutionPoint {
+  key: string;
+  label: string;
+  total: string;
+}
+
+export interface DashboardPayment {
+  method: PaymentMethod;
+  label: string;
+  sales_count: number;
+  total: string;
+  percentage: number;
+}
+
+export interface DashboardProductRanking {
+  product_id: number;
+  name: string;
+  units_sold: number;
+  total_amount: string;
+}
+
+export interface DashboardSellerPerformance {
+  seller_id: number;
+  seller_number: number;
+  name: string;
+  active: boolean;
+  sales_count: number;
+  total_amount: string;
+}
+
+export interface DashboardResponse {
+  period: {
+    date_from: string;
+    date_to: string;
+  };
+  summary: DashboardSummary;
+  evolution: {
+    grouping: "hour" | "day" | "month";
+    points: DashboardEvolutionPoint[];
+  };
+  payments: DashboardPayment[];
+  top_products: DashboardProductRanking[];
+  seller_performance: DashboardSellerPerformance[];
+  recent_sales: Sale[];
 }
