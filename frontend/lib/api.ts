@@ -52,6 +52,8 @@ export async function apiRequest<T>(
     headers.set("X-CSRF-TOKEN", csrfToken);
   }
 
+  // Keep browser requests on the Next.js origin. The /api rewrite proxies them
+  // to Flask while preserving the existing cookies and CSRF header flow.
   const response = await fetch(path, {
     credentials: "same-origin",
     cache: "no-store",

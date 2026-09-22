@@ -20,6 +20,8 @@ def test_initial_admin_is_created_once_in_development(app):
     )
 
     ensure_initial_admin(app)
+    first_password_hash = Account.query.one().password_hash
+    app.config["INITIAL_ADMIN_PASSWORD"] = "another-initial-password"
     ensure_initial_admin(app)
 
     accounts = Account.query.filter_by(email="admin@admin.com").all()
@@ -29,6 +31,7 @@ def test_initial_admin_is_created_once_in_development(app):
     assert accounts[0].role == "admin"
     assert accounts[0].active is True
     assert accounts[0].check_password("test-initial-password")
+    assert accounts[0].password_hash == first_password_hash
 
 
 def test_login_sets_authentication_cookies(client, account_factory):

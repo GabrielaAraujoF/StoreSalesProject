@@ -1,9 +1,11 @@
+import os
+
 from flask import Flask
 from flask_jwt_extended import JWTManager
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 
-from app.config import CONFIG_BY_NAME, Config
+from app.config import CONFIG_BY_NAME, ConfigurationError
 from app.database.db import db, migrate
 from app.routes import main_bp
 
@@ -21,45 +23,58 @@ from app.api.sellers import sellers_bp
 from app.api.docs import docs_bp
 from app.api.auth import auth_bp
 from app.api.dashboard import dashboard_bp
-from app.commands import create_admin_command
+from app.commands import (
+    create_admin_command,
+    reset_demo_command,
+    seed_demo_command,
+)
+from app.initial_admin import InitialAdminError, get_or_create_initial_admin
 
 jwt = JWTManager()
 
 
 def ensure_initial_admin(app):
-    password = app.config.get("INITIAL_ADMIN_PASSWORD")
-
-    if not app.config.get("CREATE_INITIAL_ADMIN") or not password:
+    if not app.config.get("CREATE_INITIAL_ADMIN"):
         return
 
     with app.app_context():
         if not inspect(db.engine).has_table(Account.__tablename__):
             return
 
-        email = app.config["INITIAL_ADMIN_EMAIL"].strip().lower()
-
-        if Account.query.filter_by(email=email).first() is not None:
-            return
-
-        account = Account(
-            name=app.config["INITIAL_ADMIN_NAME"],
-            email=email,
-            role="admin",
-            active=True,
-        )
-        account.set_password(password)
-        db.session.add(account)
-
         try:
+            get_or_create_initial_admin(
+                app.config.get("INITIAL_ADMIN_NAME"),
+                app.config.get("INITIAL_ADMIN_EMAIL"),
+                app.config.get("INITIAL_ADMIN_PASSWORD"),
+            )
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
+        except InitialAdminError as error:
+            db.session.rollback()
+            raise RuntimeError(
+                f"Configuração do administrador inicial inválida: {error}"
+            ) from error
 
 
 def create_app(config_name=None):
+    environment = (
+        config_name or os.getenv("APP_ENV") or "development"
+    ).strip().lower()
+
+    try:
+        config_class = CONFIG_BY_NAME[environment]
+    except KeyError as error:
+        valid_environments = ", ".join(CONFIG_BY_NAME)
+        raise ConfigurationError(
+            f'APP_ENV inválido: "{environment}". Use um destes valores: '
+            f"{valid_environments}."
+        ) from error
+
     app = Flask(__name__)
-    config_class = CONFIG_BY_NAME.get(config_name, Config)
     app.config.from_object(config_class)
+    app.config["APP_ENV"] = environment
+    config_class.init_app(app)
 
     jwt.init_app(app)
 
@@ -75,6 +90,8 @@ def create_app(config_name=None):
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.cli.add_command(create_admin_command)
+    app.cli.add_command(seed_demo_command)
+    app.cli.add_command(reset_demo_command)
 
     ensure_initial_admin(app)
 

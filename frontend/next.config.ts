@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
-const backendUrl = (
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000"
-).replace(/\/+$/, "");
+import { getBackendUrl } from "./lib/backend-url";
+
+const backendUrl = getBackendUrl();
 
 const nextConfig: NextConfig = {
   // Flask distinguishes routes with and without a trailing slash. Preserve the

@@ -3,11 +3,10 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { getBackendUrl } from "@/lib/backend-url";
 import type { AccountResponse } from "@/types";
 
-const backendUrl = (
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000"
-).replace(/\/+$/, "");
+const backendUrl = getBackendUrl();
 
 function loginUrl(nextPath: string, reason: string) {
   const params = new URLSearchParams({
