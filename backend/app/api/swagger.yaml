@@ -1,0 +1,243 @@
+﻿openapi: 3.1.0
+
+info:
+  title: Store Sales API
+  description: API para gerenciamento de produtos, clientes e vendas.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5000
+    description: Ambiente local
+
+tags:
+  - name: Products
+    description: Gerenciamento de produtos
+
+  - name: Customers
+    description: Gerenciamento de clientes
+
+  - name: Sales
+    description: Gerenciamento de vendas
+
+paths:
+  /api/products/:
+    get:
+      tags:
+        - Products
+      summary: Lista todos os produtos
+      operationId: listProducts
+      responses:
+        "200":
+          description: Lista de produtos
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - products
+                properties:
+                  products:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Product"
+
+    post:
+      tags:
+        - Products
+      summary: Cadastra um produto
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Produto cadastrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/products/{product_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProductId"
+
+    get:
+      tags:
+        - Products
+      summary: Busca um produto pelo ID
+      operationId: getProduct
+      responses:
+        "200":
+          description: Produto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags:
+        - Products
+      summary: Atualiza um produto
+      operationId: updateProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdate"
+      responses:
+        "200":
+          description: Produto atualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags:
+        - Products
+      summary: Atualiza parcialmente um produto
+      description: Atualiza somente os campos enviados no corpo da requisição.
+      operationId: patchProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductPatch"
+            examples:
+              updateStock:
+                summary: Atualização somente do estoque
+                value:
+                  stock: 10
+        responses:
+          "200":
+            description: Produto atualizado
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Product"
+          "400":
+            $ref: "#/components/responses/BadRequest"
+          "404":
+            $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags:
+        - Products
+      summary: Exclui um produto
+      operationId: deleteProduct
+      responses:
+        "204":
+          description: Produto excluÃ­do
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Produto possui vendas associadas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  parameters:
+    ProductId:
+      name: product_id
+      in: path
+      required: true
+      description: Identificador do produto
+      schema:
+        type: integer
+        minimum: 1
+
+  schemas:
+    Product:
+      type: object
+      required:
+        - id
+        - name
+        - category
+        - price
+        - stock
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Camiseta
+        category:
+          type: string
+          example: VestuÃ¡rio
+        price:
+          type: string
+          example: "49.90"
+        stock:
+          type: integer
+          minimum: 0
+          example: 10
+
+    ProductInput:
+      type: object
+      required:
+        - name
+        - category
+        - price
+      properties:
+        name:
+          type: string
+          example: Camiseta
+        category:
+          type: string
+          example: VestuÃ¡rio
+        price:
+          type: number
+          minimum: 0
+          example: 49.90
+        stock:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 10
+
+    ProductUpdate:
+      allOf:
+        - $ref: "#/components/schemas/ProductInput"
+        - type: object
+          required:
+            - stock
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: Recurso nÃ£o encontrado.
+
+  responses:
+    BadRequest:
+      description: Dados invÃ¡lidos
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    NotFound:
+      description: Recurso nÃ£o encontrado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
