@@ -4,7 +4,12 @@ from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import commands
-from app.commands import DEMO_CUSTOMERS, DEMO_PRODUCTS, DEMO_SELLERS
+from app.commands import (
+    DEMO_CUSTOMERS,
+    DEMO_PRODUCTS,
+    DEMO_SELLERS,
+    PUBLIC_DEMO_SELLERS,
+)
 from app.database.db import db
 from app.models.account import Account
 from app.models.customer import Customer
@@ -107,69 +112,81 @@ def test_create_admin_command_requires_environment_configuration(app):
     assert Account.query.count() == 0
 
 
-def test_seed_demo_command_creates_rich_idempotent_dataset(app, client):
-    configure_demo(app)
+def test_seed_demo_command_creates_two_active_sellers(app):
+    runner = app.test_cli_runner()
+
+    result = runner.invoke(args=["seed-demo"])
+
+    assert result.exit_code == 0
+    assert "Seed de vendedores demo concluído." in result.output
+    assert '"ana.demo@storesales.local" criado.' in result.output
+    assert '"carlos.demo@storesales.local" criado.' in result.output
+    assert [
+        (seller.name, seller.email, seller.active)
+        for seller in Seller.query.order_by(Seller.seller_number).all()
+    ] == [
+        (seller["name"], seller["email"], True)
+        for seller in PUBLIC_DEMO_SELLERS
+    ]
+    assert Account.query.count() == 0
+    assert Product.query.count() == 0
+    assert Customer.query.count() == 0
+    assert Sale.query.count() == 0
+
+
+def test_seed_demo_command_is_idempotent_and_preserves_existing_sellers(app):
+    existing_demo = Seller(
+        name="Ana cadastrada manualmente",
+        seller_number=40,
+        email="ana.demo@storesales.local",
+        active=False,
+    )
+    manual_seller = Seller(
+        name="Vendedor manual",
+        seller_number=41,
+        email="manual@example.com",
+        active=True,
+    )
+    db.session.add_all([existing_demo, manual_seller])
+    db.session.commit()
     runner = app.test_cli_runner()
 
     first_result = runner.invoke(args=["seed-demo"])
-
-    assert first_result.exit_code == 0
-    assert "Seed demonstrativo concluído." in first_result.output
-    assert "12 vendas" in first_result.output
-
-    admin = Account.query.filter_by(email="admin@storesales.demo").one()
-    assert admin.name == "Administrador Demo"
-    assert admin.role == "admin"
-    assert admin.active is True
-    assert admin.check_password("senha-demo-segura") is True
-
-    first_counts = demo_counts()
-    first_password_hash = admin.password_hash
-
-    assert first_counts == {
-        "accounts": 1,
-        "sellers": 4,
-        "products": 9,
-        "customers": 6,
-        "sales": 12,
-        "sale_items": 25,
-    }
-    assert Seller.query.filter_by(active=True).count() == 3
-    assert {sale.payment_method for sale in Sale.query.all()} == {
-        "cash",
-        "credit_card",
-        "debit_card",
-        "pix",
-    }
-    assert min(product.stock for product in Product.query.all()) == 0
-    assert max(product.stock for product in Product.query.all()) == 65
-
-    dashboard_response = client.get(
-        "/api/dashboard/?date_from=2026-07-01&date_to=2026-09-30"
-    )
-    assert dashboard_response.status_code == 200
-    dashboard = dashboard_response.get_json()
-    assert dashboard["summary"]["sales_count"] == 12
-    assert dashboard["summary"]["units_sold"] > 20
-    assert len(dashboard["top_products"]) == 5
-    assert len(dashboard["seller_performance"]) == 3
-
-    app.config["INITIAL_ADMIN_PASSWORD"] = "outra-senha-segura"
     second_result = runner.invoke(args=["seed-demo"])
 
+    assert first_result.exit_code == 0
     assert second_result.exit_code == 0
-    assert "0 vendas" in second_result.output
-    assert "Vendas já existentes preservadas: 12." in second_result.output
-    assert demo_counts() == first_counts
-    assert Account.query.one().password_hash == first_password_hash
-    assert Account.query.one().check_password("senha-demo-segura") is True
-    assert Account.query.one().check_password("outra-senha-segura") is False
+    assert (
+        '"ana.demo@storesales.local" já existia e foi mantido.'
+        in first_result.output
+    )
+    assert '"carlos.demo@storesales.local" criado.' in first_result.output
+    assert second_result.output.count("já existia e foi mantido") == 2
+    assert Seller.query.count() == 3
+
+    preserved_demo = Seller.query.filter_by(
+        email="ana.demo@storesales.local"
+    ).one()
+    preserved_manual = Seller.query.filter_by(email="manual@example.com").one()
+    carlos = Seller.query.filter_by(
+        email="carlos.demo@storesales.local"
+    ).one()
+
+    assert preserved_demo.name == "Ana cadastrada manualmente"
+    assert preserved_demo.seller_number == 40
+    assert preserved_demo.active is False
+    assert preserved_manual.name == "Vendedor manual"
+    assert preserved_manual.seller_number == 41
+    assert preserved_manual.active is True
+    assert carlos.name == "Carlos Demo"
+    assert carlos.seller_number == 42
+    assert carlos.active is True
 
 
 def test_reset_demo_command_restores_original_data_and_preserves_schema(app):
     configure_demo(app, reset_enabled=True)
     runner = app.test_cli_runner()
-    assert runner.invoke(args=["seed-demo"]).exit_code == 0
+    assert runner.invoke(args=["reset-demo", "--yes"]).exit_code == 0
     tables_before = set(inspect(db.engine).get_table_names())
 
     Product.query.filter_by(name=DEMO_PRODUCTS[0][0]).one().stock = 999
@@ -273,7 +290,7 @@ def test_reset_demo_command_refuses_non_sqlite_database(app):
 def test_reset_demo_command_rolls_back_if_reseeding_fails(app, monkeypatch):
     configure_demo(app, reset_enabled=True)
     runner = app.test_cli_runner()
-    assert runner.invoke(args=["seed-demo"]).exit_code == 0
+    assert runner.invoke(args=["reset-demo", "--yes"]).exit_code == 0
     customer = Customer(name="Cliente preservado", phone="(11) 96666-0000")
     db.session.add(customer)
     db.session.commit()

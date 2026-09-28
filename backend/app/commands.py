@@ -41,6 +41,19 @@ DEMO_SELLERS = (
     },
 )
 
+PUBLIC_DEMO_SELLERS = (
+    {
+        "name": "Ana Demo",
+        "email": "ana.demo@storesales.local",
+        "active": True,
+    },
+    {
+        "name": "Carlos Demo",
+        "email": "carlos.demo@storesales.local",
+        "active": True,
+    },
+)
+
 DEMO_PRODUCTS = (
     ("Café Especial 500g", "Bebidas", "39.90", 48),
     ("Chá Artesanal 20 sachês", "Bebidas", "24.90", 65),
@@ -191,6 +204,32 @@ def upsert_demo_sellers():
         sellers[seller.email] = seller
 
     return sellers, created_count
+
+
+def seed_public_demo_sellers():
+    results = []
+    next_number = db.session.scalar(
+        db.select(db.func.max(Seller.seller_number))
+    ) or 0
+
+    for seller_data in PUBLIC_DEMO_SELLERS:
+        seller = Seller.query.filter(
+            db.func.lower(Seller.email) == seller_data["email"]
+        ).first()
+
+        if seller is not None:
+            results.append((seller, False))
+            continue
+
+        next_number += 1
+        seller = Seller(
+            seller_number=next_number,
+            **seller_data,
+        )
+        db.session.add(seller)
+        results.append((seller, True))
+
+    return results
 
 
 def upsert_demo_products():
@@ -354,22 +393,26 @@ def create_admin_command():
 @click.command("seed-demo")
 @with_appcontext
 def seed_demo_command():
-    """Cria uma carga demonstrativa sem duplicar os registros existentes."""
+    """Garante os vendedores permanentes da demonstração pública."""
     try:
-        result = seed_demo_data()
+        results = seed_public_demo_sellers()
         db.session.commit()
-    except InitialAdminError as error:
-        db.session.rollback()
-        raise click.ClickException(str(error)) from error
     except SQLAlchemyError as error:
         db.session.rollback()
         raise click.ClickException(
-            "Não foi possível criar os dados demonstrativos. "
+            "Não foi possível criar os vendedores demonstrativos. "
             "Execute as migrations antes do seed."
         ) from error
 
-    click.echo("Seed demonstrativo concluído.")
-    echo_seed_summary(result)
+    for seller, created in results:
+        if created:
+            click.echo(f'Vendedor demo "{seller.email}" criado.')
+        else:
+            click.echo(
+                f'Vendedor demo "{seller.email}" já existia e foi mantido.'
+            )
+
+    click.echo("Seed de vendedores demo concluído.")
 
 
 @click.command("reset-demo")
