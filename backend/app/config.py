@@ -6,9 +6,13 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = BASE_DIR.parent
-LOCAL_DATABASE_URI = f"sqlite:///{BASE_DIR / 'store.db'}"
 
 load_dotenv(BACKEND_DIR / ".env")
+
+if os.getenv("APP_ENV") == "production":
+    LOCAL_DATABASE_URI = "sqlite:////data/store.db"
+else:
+    LOCAL_DATABASE_URI = f"sqlite:///{BASE_DIR / 'store.db'}"
 
 
 def environment_flag(name, default=False):
