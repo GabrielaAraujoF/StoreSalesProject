@@ -71,7 +71,7 @@ class TestingConfig(Config):
 
 class ProductionConfig(Config):
     REQUIRED_ENVIRONMENT_VARIABLES = {
-        "DATABASE_URL": "SQLALCHEMY_DATABASE_URI",
+        
         "SECRET_KEY": "SECRET_KEY",
         "JWT_SECRET_KEY": "JWT_SECRET_KEY",
         "INITIAL_ADMIN_NAME": "INITIAL_ADMIN_NAME",
