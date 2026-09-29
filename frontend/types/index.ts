@@ -21,6 +21,7 @@ export interface SellerSummary {
 export interface Seller extends SellerSummary {
   email: string;
   active: boolean;
+  is_demo_default: boolean;
 }
 
 export interface Account {
@@ -129,6 +130,7 @@ export interface SellerListResponse {
 
 export interface ActiveSellerListResponse {
   sellers: SellerSummary[];
+  default_seller_id: number | null;
 }
 
 export interface AuthResponse {

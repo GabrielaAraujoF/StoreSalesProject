@@ -14,12 +14,17 @@ const ACTIVE_SELLERS_ENDPOINT = "/api/sellers/active";
 export async function getActiveSellers(
   signal?: AbortSignal,
 ): Promise<SellerSummary[]> {
-  const response = await apiRequest<ActiveSellerListResponse>(
-    ACTIVE_SELLERS_ENDPOINT,
-    { signal },
-  );
+  const response = await getActiveSellerOptions(signal);
 
   return response.sellers;
+}
+
+export function getActiveSellerOptions(
+  signal?: AbortSignal,
+): Promise<ActiveSellerListResponse> {
+  return apiRequest<ActiveSellerListResponse>(ACTIVE_SELLERS_ENDPOINT, {
+    signal,
+  });
 }
 
 export async function getSellers(signal?: AbortSignal): Promise<Seller[]> {
@@ -45,14 +50,4 @@ export function updateSeller(
     method: "PATCH",
     body: JSON.stringify(changes),
   });
-}
-
-export async function getSellerByNumber(
-  sellerNumber: number,
-  signal?: AbortSignal,
-): Promise<SellerSummary | null> {
-  const sellers = await getActiveSellers(signal);
-  return (
-    sellers.find((seller) => seller.seller_number === sellerNumber) ?? null
-  );
 }

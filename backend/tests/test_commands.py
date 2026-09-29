@@ -134,7 +134,7 @@ def test_seed_demo_command_creates_two_active_sellers(app):
     assert Sale.query.count() == 0
 
 
-def test_seed_demo_command_is_idempotent_and_preserves_existing_sellers(app):
+def test_seed_demo_command_is_idempotent_and_repairs_default_seller(app):
     existing_demo = Seller(
         name="Ana cadastrada manualmente",
         seller_number=40,
@@ -172,9 +172,9 @@ def test_seed_demo_command_is_idempotent_and_preserves_existing_sellers(app):
         email="carlos.demo@storesales.local"
     ).one()
 
-    assert preserved_demo.name == "Ana cadastrada manualmente"
+    assert preserved_demo.name == "Ana Demo"
     assert preserved_demo.seller_number == 40
-    assert preserved_demo.active is False
+    assert preserved_demo.active is True
     assert preserved_manual.name == "Vendedor manual"
     assert preserved_manual.seller_number == 41
     assert preserved_manual.active is True
@@ -219,7 +219,7 @@ def test_reset_demo_command_restores_original_data_and_preserves_schema(app):
     assert "Demonstração restaurada com sucesso." in result.output
     assert demo_counts() == {
         "accounts": 1,
-        "sellers": 4,
+        "sellers": 6,
         "products": 9,
         "customers": 6,
         "sales": 12,
@@ -239,7 +239,7 @@ def test_reset_demo_command_restores_original_data_and_preserves_schema(app):
         for seller in Seller.query.all()
     } == {
         (seller["name"], seller["email"], seller["active"])
-        for seller in DEMO_SELLERS
+        for seller in (*DEMO_SELLERS, *PUBLIC_DEMO_SELLERS)
     }
     admin = Account.query.one()
     assert admin.email == "admin@storesales.demo"

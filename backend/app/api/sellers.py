@@ -2,6 +2,7 @@ from flask import Blueprint, request
 from sqlalchemy.exc import IntegrityError
 
 from app.database.db import db
+from app.demo import is_default_demo_seller
 from app.models.seller import Seller
 from app.auth.decorators import admin_required
 
@@ -20,7 +21,8 @@ def seller_to_dict(seller):
         "seller_number": seller.seller_number,
         "name": seller.name,
         "email" : seller.email,
-        "active" : seller.active
+        "active" : seller.active,
+        "is_demo_default": is_default_demo_seller(seller),
     }
 
 
@@ -212,9 +214,35 @@ def list_active_sellers():
         .order_by(Seller.seller_number)
         .all()
     )
+    default_seller = next(
+        (seller for seller in sellers if is_default_demo_seller(seller)),
+        None,
+    )
     return {
-        "sellers": [active_seller_to_dict(seller) for seller in sellers]
+        "sellers": [active_seller_to_dict(seller) for seller in sellers],
+        "default_seller_id": default_seller.id if default_seller else None,
     }
+
+
+def demo_default_protection_error(seller, changes=None):
+    if not is_default_demo_seller(seller):
+        return None
+
+    changes = changes or {}
+    removes_default = (
+        changes.get("active") is False
+        or (
+            "email" in changes
+            and changes["email"].casefold() != seller.email.casefold()
+        )
+    )
+    if not removes_default:
+        return None
+
+    return {
+        "error": "O vendedor padrão da demonstração deve permanecer ativo e não pode ser removido.",
+        "code": "demo_default_seller_protected",
+    }, 409
 
 
 @sellers_bp.get("/")
@@ -254,6 +282,11 @@ def patch_seller(seller_id):
     if error:
         return error
 
+    error = demo_default_protection_error(seller, validated_data)
+
+    if error:
+        return error
+
     for field, value in validated_data.items():
         setattr(seller, field, value)
 
@@ -283,6 +316,11 @@ def update_seller(seller_id):
     if error:
         return error
 
+    error = demo_default_protection_error(seller, validated_data)
+
+    if error:
+        return error
+
     seller.name = validated_data["name"]
     seller.email = validated_data["email"]
     seller.active = validated_data["active"]
@@ -301,6 +339,12 @@ def delete_seller(seller_id):
 
     if seller is None:
         return {"error": "Vendedor não encontrado."}, 404
+
+    if is_default_demo_seller(seller):
+        return {
+            "error": "O vendedor padrão da demonstração não pode ser excluído.",
+            "code": "demo_default_seller_protected",
+        }, 409
 
     db.session.delete(seller)
 

@@ -4,8 +4,11 @@
 
 Production startup runs the migrations and then the idempotent `seed-demo`
 command before Gunicorn. The command only ensures that the two public demo
-sellers exist and are active when first created; it does not change an existing
-seller or create any other application data.
+sellers exist and does not create any other application data. `Ana Demo` is the
+default seller used by the public demo; the seed restores her name and active
+status when necessary, while preserving the database-generated seller number.
+The API exposes this default as an optional ID, so installations that do not run
+the demo seed keep the normal explicit seller-selection behavior.
 
 ```bash
 python -m flask --app run:app db upgrade
@@ -21,7 +24,8 @@ does not require any additional environment variables.
 
 The public demo keeps its SQLite database on the Railway volume and accepts
 normal writes. The `reset-demo` Flask CLI command removes only application data
-and recreates the original complete fixture. It does not drop tables or alter
+and recreates the original complete fixture, including both public demo sellers.
+It does not drop tables or alter
 Alembic migrations. This reset is separate from the non-destructive
 `seed-demo` command used during startup.
 

@@ -26,6 +26,7 @@ def test_create_seller_generates_number(admin_client):
         "name": "Ana",
         "email": "ana@example.com",
         "active": True,
+        "is_demo_default": False,
     }
     assert second["seller_number"] == 2
 
@@ -108,8 +109,66 @@ def test_list_active_sellers_is_public_and_returns_minimum_data(client):
                 "seller_number": 102,
                 "name": "João Silva",
             }
-        ]
+        ],
+        "default_seller_id": None,
     }
+
+
+def test_active_sellers_identifies_demo_default(client):
+    default_seller = Seller(
+        seller_number=7,
+        name="Ana Demo",
+        email="ana.demo@storesales.local",
+        active=True,
+    )
+    another_seller = Seller(
+        seller_number=8,
+        name="Carlos Demo",
+        email="carlos.demo@storesales.local",
+        active=True,
+    )
+    db.session.add_all([default_seller, another_seller])
+    db.session.commit()
+
+    response = client.get("/api/sellers/active")
+
+    assert response.status_code == 200
+    assert response.get_json()["default_seller_id"] == default_seller.id
+
+
+@pytest.mark.parametrize(
+    ("method", "payload"),
+    [
+        ("patch", {"active": False}),
+        ("patch", {"email": "outro@example.com"}),
+        (
+            "put",
+            {
+                "name": "Ana Demo",
+                "email": "outro@example.com",
+                "active": True,
+            },
+        ),
+        ("delete", None),
+    ],
+)
+def test_demo_default_seller_cannot_be_removed(admin_client, method, payload):
+    created = create_seller(
+        admin_client,
+        name="Ana Demo",
+        email="ana.demo@storesales.local",
+    )
+    request_method = getattr(admin_client, method)
+    kwargs = {"json": payload} if payload is not None else {}
+
+    response = request_method(f"/api/sellers/{created['id']}", **kwargs)
+
+    assert response.status_code == 409
+    assert response.get_json()["code"] == "demo_default_seller_protected"
+    protected_seller = db.session.get(Seller, created["id"])
+    assert protected_seller is not None
+    assert protected_seller.email == "ana.demo@storesales.local"
+    assert protected_seller.active is True
 
 
 @pytest.mark.parametrize("path", ["/api/sellers/", "/api/sellers/1"])

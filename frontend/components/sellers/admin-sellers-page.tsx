@@ -327,6 +327,13 @@ export function AdminSellersPage({ account }: { account: Account }) {
   function requestStatusChange(seller: Seller) {
     clearMessages();
 
+    if (seller.is_demo_default) {
+      setActionError(
+        "O vendedor padrão da demonstração deve permanecer ativo.",
+      );
+      return;
+    }
+
     if (seller.active) {
       setDeactivatingSeller(seller);
       return;
@@ -765,9 +772,16 @@ export function AdminSellersPage({ account }: { account: Account }) {
                             </span>
                           </td>
                           <td className="px-4 py-4 align-middle">
-                            <p className="break-words text-sm font-bold text-slate-800">
-                              {seller.name}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="break-words text-sm font-bold text-slate-800">
+                                {seller.name}
+                              </p>
+                              {seller.is_demo_default && (
+                                <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-sky-700">
+                                  Padrão demo
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-4 align-middle">
                             <p className="break-all text-sm text-slate-600">
@@ -790,7 +804,16 @@ export function AdminSellersPage({ account }: { account: Account }) {
                               <button
                                 type="button"
                                 onClick={() => requestStatusChange(seller)}
-                                disabled={isSubmitting || statusSellerId !== null}
+                                disabled={
+                                  seller.is_demo_default ||
+                                  isSubmitting ||
+                                  statusSellerId !== null
+                                }
+                                title={
+                                  seller.is_demo_default
+                                    ? "O vendedor padrão da demonstração não pode ser desativado."
+                                    : undefined
+                                }
                                 className={`min-h-9 rounded-lg border bg-white px-3 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-4 disabled:cursor-not-allowed disabled:opacity-50 ${
                                   seller.active
                                     ? "border-amber-200 text-amber-800 hover:border-amber-300 hover:bg-amber-50 focus-visible:ring-amber-200"
@@ -822,6 +845,11 @@ export function AdminSellersPage({ account }: { account: Account }) {
                           <h3 className="break-words font-bold text-slate-800">
                             {seller.name}
                           </h3>
+                          {seller.is_demo_default && (
+                            <span className="mt-1.5 inline-flex rounded-full bg-sky-50 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-sky-700">
+                              Padrão demo
+                            </span>
+                          )}
                           <p className="mt-1 font-mono text-sm font-bold text-emerald-800">
                             Nº {formatSellerNumber(seller.seller_number)}
                           </p>
@@ -843,7 +871,16 @@ export function AdminSellersPage({ account }: { account: Account }) {
                         <button
                           type="button"
                           onClick={() => requestStatusChange(seller)}
-                          disabled={isSubmitting || statusSellerId !== null}
+                          disabled={
+                            seller.is_demo_default ||
+                            isSubmitting ||
+                            statusSellerId !== null
+                          }
+                          title={
+                            seller.is_demo_default
+                              ? "O vendedor padrão da demonstração não pode ser desativado."
+                              : undefined
+                          }
                           className={`min-h-10 flex-1 rounded-lg border bg-white px-3.5 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-4 disabled:cursor-not-allowed disabled:opacity-50 ${
                             seller.active
                               ? "border-amber-200 text-amber-800 hover:bg-amber-50 focus-visible:ring-amber-200"

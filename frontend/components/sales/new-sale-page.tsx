@@ -9,7 +9,7 @@ import { ApiError } from "@/lib/api";
 import { getCustomers } from "@/services/customers";
 import { getProducts } from "@/services/products";
 import { createSale } from "@/services/sales";
-import { getSellerByNumber } from "@/services/sellers";
+import { getActiveSellerOptions } from "@/services/sellers";
 import type {
   Customer,
   PaymentMethod,
@@ -199,10 +199,11 @@ export function NewSalePage() {
   const [isCustomerSearchOpen, setIsCustomerSearchOpen] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState("");
-  const [sellerNumber, setSellerNumber] = useState("");
-  const [selectedSeller, setSelectedSeller] = useState<SellerSummary | null>(null);
-  const [sellerLookupError, setSellerLookupError] = useState<string | null>(null);
-  const [isLoadingSeller, setIsLoadingSeller] = useState(false);
+  const [sellers, setSellers] = useState<SellerSummary[]>([]);
+  const [selectedSellerId, setSelectedSellerId] = useState("");
+  const [defaultSellerId, setDefaultSellerId] = useState<number | null>(null);
+  const [sellerError, setSellerError] = useState<string | null>(null);
+  const [isLoadingSellers, setIsLoadingSellers] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -236,57 +237,40 @@ export function NewSalePage() {
   }, []);
 
   useEffect(() => {
-    const normalizedSellerNumber = sellerNumber.trim();
-
-    if (!normalizedSellerNumber) {
-      return;
-    }
-
-    const numericSellerNumber = Number(normalizedSellerNumber);
-    if (
-      !Number.isInteger(numericSellerNumber) ||
-      numericSellerNumber <= 0
-    ) {
-      return;
-    }
-
     const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
-      setIsLoadingSeller(true);
-      setSelectedSeller(null);
-      setSellerLookupError(null);
+
+    async function loadSellers() {
+      setIsLoadingSellers(true);
+      setSellerError(null);
 
       try {
-        const seller = await getSellerByNumber(
-          numericSellerNumber,
-          controller.signal,
+        const response = await getActiveSellerOptions(controller.signal);
+        setSellers(response.sellers);
+        setDefaultSellerId(response.default_seller_id);
+        setSelectedSellerId(
+          response.default_seller_id === null
+            ? ""
+            : String(response.default_seller_id),
         );
-
-        if (!seller) {
-          setSellerLookupError("Vendedor não encontrado.");
-        } else {
-          setSelectedSeller(seller);
-        }
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
 
-        setSellerLookupError(
-          getErrorMessage(error, "Não foi possível localizar o vendedor."),
+        setSellerError(
+          getErrorMessage(error, "Não foi possível carregar os vendedores."),
         );
       } finally {
         if (!controller.signal.aborted) {
-          setIsLoadingSeller(false);
+          setIsLoadingSellers(false);
         }
       }
-    }, 350);
+    }
 
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [sellerNumber]);
+    void loadSellers();
+
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -363,6 +347,12 @@ export function NewSalePage() {
     () =>
       customers.find((customer) => customer.id === Number(customerId)) ?? null,
     [customerId, customers],
+  );
+
+  const selectedSeller = useMemo(
+    () =>
+      sellers.find((seller) => seller.id === Number(selectedSellerId)) ?? null,
+    [selectedSellerId, sellers],
   );
 
   const filteredCustomers = useMemo(() => {
@@ -670,9 +660,6 @@ export function NewSalePage() {
       setCartItems([]);
       setCustomerId("");
       setCustomerSearch("");
-      setSellerNumber("");
-      setSelectedSeller(null);
-      setSellerLookupError(null);
       setPaymentMethod("");
       setProductSearch("");
       setSelectionError(null);
@@ -696,8 +683,8 @@ export function NewSalePage() {
       }
 
       if (isSellerConflict) {
-        setSelectedSeller(null);
-        setSellerLookupError(
+        setSelectedSellerId("");
+        setSellerError(
           getErrorMessage(error, "O vendedor informado não está disponível."),
         );
       }
@@ -942,51 +929,52 @@ export function NewSalePage() {
                 htmlFor="sale-seller"
                 className="text-sm font-bold text-slate-700"
               >
-                Número do vendedor <span className="text-red-600">*</span>
+                Vendedor <span className="text-red-600">*</span>
               </label>
-              <input
+              <select
                 id="sale-seller"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={sellerNumber}
+                value={selectedSellerId}
                 onChange={(event) => {
-                  const value = event.target.value;
-                  if (/^\d*$/.test(value)) {
-                    setSellerNumber(value);
-                    setSelectedSeller(null);
-                    setSellerLookupError(
-                      value && Number(value) <= 0
-                        ? "Informe um número de vendedor válido."
-                        : null,
-                    );
-                    setIsLoadingSeller(false);
-                    setSubmitError(null);
-                  }
+                  setSelectedSellerId(event.target.value);
+                  setSellerError(null);
+                  setSubmitError(null);
                 }}
-                disabled={isSubmitting}
-                placeholder="Ex.: 102"
-                aria-invalid={Boolean(sellerLookupError)}
+                disabled={isSubmitting || isLoadingSellers || sellers.length === 0}
+                aria-invalid={Boolean(sellerError)}
                 aria-describedby="sale-seller-feedback"
                 className={`${fieldClasses()} mt-2`}
-              />
+              >
+                <option value="">
+                  {isLoadingSellers
+                    ? "Carregando vendedores..."
+                    : sellers.length === 0
+                      ? "Nenhum vendedor ativo"
+                      : "Selecione um vendedor"}
+                </option>
+                {sellers.map((seller) => (
+                  <option key={seller.id} value={seller.id}>
+                    {seller.name} · Nº {String(seller.seller_number).padStart(3, "0")}
+                    {seller.id === defaultSellerId ? " (padrão demo)" : ""}
+                  </option>
+                ))}
+              </select>
               <p
                 id="sale-seller-feedback"
                 className={`mt-1.5 text-xs font-medium ${
-                  sellerLookupError
+                  sellerError
                     ? "text-red-600"
                     : selectedSeller
                       ? "text-emerald-800"
                       : "text-slate-500"
                 }`}
               >
-                {isLoadingSeller
-                  ? "Localizando vendedor..."
-                  : sellerLookupError
-                    ? sellerLookupError
+                {isLoadingSellers
+                  ? "Carregando vendedores disponíveis..."
+                  : sellerError
+                    ? sellerError
                     : selectedSeller
-                      ? `Vendedor: ${selectedSeller.name}`
-                      : "Informe o número para identificar o vendedor."}
+                      ? `Selecionado: ${selectedSeller.name} · Nº ${String(selectedSeller.seller_number).padStart(3, "0")} · ID ${selectedSeller.id}${selectedSeller.id === defaultSellerId ? " · Padrão demo" : ""}`
+                      : "Selecione um vendedor disponível."}
               </p>
             </div>
           </section>

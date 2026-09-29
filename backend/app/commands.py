@@ -7,6 +7,10 @@ from flask.cli import with_appcontext
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.database.db import db
+from app.demo import (
+    PUBLIC_DEMO_SELLERS,
+    is_default_demo_seller,
+)
 from app.initial_admin import InitialAdminError, get_or_create_initial_admin
 from app.models.account import Account
 from app.models.customer import Customer
@@ -38,19 +42,6 @@ DEMO_SELLERS = (
         "name": "Paulo Mendes",
         "email": "paulo.mendes@storesales.demo",
         "active": False,
-    },
-)
-
-PUBLIC_DEMO_SELLERS = (
-    {
-        "name": "Ana Demo",
-        "email": "ana.demo@storesales.local",
-        "active": True,
-    },
-    {
-        "name": "Carlos Demo",
-        "email": "carlos.demo@storesales.local",
-        "active": True,
     },
 )
 
@@ -218,6 +209,9 @@ def seed_public_demo_sellers():
         ).first()
 
         if seller is not None:
+            if is_default_demo_seller(seller):
+                seller.name = seller_data["name"]
+                seller.active = True
             results.append((seller, False))
             continue
 
@@ -321,6 +315,8 @@ def create_missing_demo_sales(sellers, products, customers):
 def seed_demo_data():
     account, account_created = configured_initial_admin()
     sellers, sellers_created = upsert_demo_sellers()
+    public_demo_sellers = seed_public_demo_sellers()
+    sellers_created += sum(created for _, created in public_demo_sellers)
     products, products_created = upsert_demo_products()
     customers, customers_created = upsert_demo_customers()
     sales_created, sales_skipped = create_missing_demo_sales(
