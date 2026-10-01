@@ -6,11 +6,10 @@ PUBLIC_DEMO_SELLERS = (
         "email": DEFAULT_DEMO_SELLER_EMAIL,
         "active": True,
     },
-    {
-        "name": "Carlos Demo",
-        "email": "carlos.demo@storesales.local",
-        "active": True,
-    },
+)
+
+LEGACY_PUBLIC_DEMO_SELLER_EMAILS = (
+    "carlos.demo@storesales.local",
 )
 
 

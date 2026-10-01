@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.database.db import db
 from app.demo import (
+    LEGACY_PUBLIC_DEMO_SELLER_EMAILS,
     PUBLIC_DEMO_SELLERS,
     is_default_demo_seller,
 )
@@ -223,7 +224,23 @@ def seed_public_demo_sellers():
         db.session.add(seller)
         results.append((seller, True))
 
-    return results
+    db.session.flush()
+    default_seller = next(
+        seller for seller, _ in results if is_default_demo_seller(seller)
+    )
+    legacy_sellers = Seller.query.filter(
+        db.func.lower(Seller.email).in_(LEGACY_PUBLIC_DEMO_SELLER_EMAILS)
+    ).all()
+
+    for legacy_seller in legacy_sellers:
+        db.session.execute(
+            db.update(Sale)
+            .where(Sale.seller_id == legacy_seller.id)
+            .values(seller_id=default_seller.id)
+        )
+        db.session.delete(legacy_seller)
+
+    return results, len(legacy_sellers)
 
 
 def upsert_demo_products():
@@ -315,7 +332,7 @@ def create_missing_demo_sales(sellers, products, customers):
 def seed_demo_data():
     account, account_created = configured_initial_admin()
     sellers, sellers_created = upsert_demo_sellers()
-    public_demo_sellers = seed_public_demo_sellers()
+    public_demo_sellers, _ = seed_public_demo_sellers()
     sellers_created += sum(created for _, created in public_demo_sellers)
     products, products_created = upsert_demo_products()
     customers, customers_created = upsert_demo_customers()
@@ -391,7 +408,7 @@ def create_admin_command():
 def seed_demo_command():
     """Garante os vendedores permanentes da demonstração pública."""
     try:
-        results = seed_public_demo_sellers()
+        results, legacy_sellers_removed = seed_public_demo_sellers()
         db.session.commit()
     except SQLAlchemyError as error:
         db.session.rollback()
@@ -407,6 +424,11 @@ def seed_demo_command():
             click.echo(
                 f'Vendedor demo "{seller.email}" já existia e foi mantido.'
             )
+
+    if legacy_sellers_removed:
+        click.echo(
+            "Carlos Demo removido; vendas existentes foram atribuídas à Ana Demo."
+        )
 
     click.echo("Seed de vendedores demo concluído.")
 

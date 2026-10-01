@@ -29,6 +29,7 @@ class ConfigurationError(RuntimeError):
 
 
 class Config:
+    PUBLIC_DEMO_MODE = False
     INITIAL_ADMIN_NAME = os.getenv("INITIAL_ADMIN_NAME")
     INITIAL_ADMIN_EMAIL = os.getenv("INITIAL_ADMIN_EMAIL")
     INITIAL_ADMIN_PASSWORD = os.getenv("INITIAL_ADMIN_PASSWORD")
@@ -70,6 +71,7 @@ class TestingConfig(Config):
 
 
 class ProductionConfig(Config):
+    PUBLIC_DEMO_MODE = True
     REQUIRED_ENVIRONMENT_VARIABLES = {
         
         "SECRET_KEY": "SECRET_KEY",

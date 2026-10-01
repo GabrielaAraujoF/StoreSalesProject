@@ -114,7 +114,8 @@ def test_list_active_sellers_is_public_and_returns_minimum_data(client):
     }
 
 
-def test_active_sellers_identifies_demo_default(client):
+def test_active_sellers_identifies_demo_default(client, app):
+    app.config["PUBLIC_DEMO_MODE"] = True
     default_seller = Seller(
         seller_number=7,
         name="Ana Demo",
@@ -136,6 +137,22 @@ def test_active_sellers_identifies_demo_default(client):
     assert response.get_json()["default_seller_id"] == default_seller.id
 
 
+def test_demo_seller_is_not_default_outside_public_demo(client):
+    seller = Seller(
+        seller_number=7,
+        name="Ana Demo",
+        email="ana.demo@storesales.local",
+        active=True,
+    )
+    db.session.add(seller)
+    db.session.commit()
+
+    response = client.get("/api/sellers/active")
+
+    assert response.status_code == 200
+    assert response.get_json()["default_seller_id"] is None
+
+
 @pytest.mark.parametrize(
     ("method", "payload"),
     [
@@ -152,7 +169,13 @@ def test_active_sellers_identifies_demo_default(client):
         ("delete", None),
     ],
 )
-def test_demo_default_seller_cannot_be_removed(admin_client, method, payload):
+def test_demo_default_seller_cannot_be_removed(
+    admin_client,
+    app,
+    method,
+    payload,
+):
+    app.config["PUBLIC_DEMO_MODE"] = True
     created = create_seller(
         admin_client,
         name="Ana Demo",

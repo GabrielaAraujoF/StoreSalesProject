@@ -1,4 +1,4 @@
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request
 from sqlalchemy.exc import IntegrityError
 
 from app.database.db import db
@@ -13,6 +13,13 @@ sellers_bp = Blueprint(
     url_prefix="/api/sellers",
 )
 
+
+def is_public_demo_default(seller):
+    return bool(current_app.config.get("PUBLIC_DEMO_MODE")) and (
+        is_default_demo_seller(seller)
+    )
+
+
 ALLOWED_FIELDS = {"name", "email", "active"}    # campos permitidos vir do front
 
 def seller_to_dict(seller):
@@ -22,7 +29,7 @@ def seller_to_dict(seller):
         "name": seller.name,
         "email" : seller.email,
         "active" : seller.active,
-        "is_demo_default": is_default_demo_seller(seller),
+        "is_demo_default": is_public_demo_default(seller),
     }
 
 
@@ -215,7 +222,7 @@ def list_active_sellers():
         .all()
     )
     default_seller = next(
-        (seller for seller in sellers if is_default_demo_seller(seller)),
+        (seller for seller in sellers if is_public_demo_default(seller)),
         None,
     )
     return {
@@ -225,7 +232,7 @@ def list_active_sellers():
 
 
 def demo_default_protection_error(seller, changes=None):
-    if not is_default_demo_seller(seller):
+    if not is_public_demo_default(seller):
         return None
 
     changes = changes or {}
@@ -340,7 +347,7 @@ def delete_seller(seller_id):
     if seller is None:
         return {"error": "Vendedor não encontrado."}, 404
 
-    if is_default_demo_seller(seller):
+    if is_public_demo_default(seller):
         return {
             "error": "O vendedor padrão da demonstração não pode ser excluído.",
             "code": "demo_default_seller_protected",

@@ -90,6 +90,52 @@ def test_sale_calculates_total_and_reduces_stock(client):
       assert updated_product["stock"] == 7
 
 
+def test_public_demo_sale_always_uses_default_seller(client, app):
+      app.config["PUBLIC_DEMO_MODE"] = True
+      selected_seller = create_seller()
+      default_seller = Seller(
+          name="Ana Demo",
+          seller_number=103,
+          email="ana.demo@storesales.local",
+          active=True,
+      )
+      db.session.add(default_seller)
+      db.session.commit()
+      product = create_product(client)
+
+      response = client.post(
+          "/api/sales/",
+          json={
+              "seller_id": selected_seller.id,
+              "payment_method": "cash",
+              "items": [{"product_id": product["id"], "quantity": 1}],
+          },
+      )
+
+      assert response.status_code == 201
+      assert response.get_json()["seller"]["id"] == default_seller.id
+
+
+def test_public_demo_requires_default_seller(client, app):
+      app.config["PUBLIC_DEMO_MODE"] = True
+      seller = create_seller()
+      product = create_product(client)
+
+      response = client.post(
+          "/api/sales/",
+          json={
+              "seller_id": seller.id,
+              "payment_method": "cash",
+              "items": [{"product_id": product["id"], "quantity": 1}],
+          },
+      )
+
+      assert response.status_code == 503
+      assert response.get_json() == {
+          "error": "Vendedor padrão da demonstração não disponível."
+      }
+
+
 def test_reject_sale_with_insufficient_stock(client):
       seller = create_seller()
       product = create_product(

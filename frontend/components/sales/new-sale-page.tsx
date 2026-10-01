@@ -925,57 +925,80 @@ export function NewSalePage() {
             </div>
 
             <div className="min-w-0">
-              <label
-                htmlFor="sale-seller"
-                className="text-sm font-bold text-slate-700"
-              >
-                Vendedor <span className="text-red-600">*</span>
-              </label>
-              <select
-                id="sale-seller"
-                value={selectedSellerId}
-                onChange={(event) => {
-                  setSelectedSellerId(event.target.value);
-                  setSellerError(null);
-                  setSubmitError(null);
-                }}
-                disabled={isSubmitting || isLoadingSellers || sellers.length === 0}
-                aria-invalid={Boolean(sellerError)}
-                aria-describedby="sale-seller-feedback"
-                className={`${fieldClasses()} mt-2`}
-              >
-                <option value="">
-                  {isLoadingSellers
-                    ? "Carregando vendedores..."
-                    : sellers.length === 0
-                      ? "Nenhum vendedor ativo"
-                      : "Selecione um vendedor"}
-                </option>
-                {sellers.map((seller) => (
-                  <option key={seller.id} value={seller.id}>
-                    {seller.name} · Nº {String(seller.seller_number).padStart(3, "0")}
-                    {seller.id === defaultSellerId ? " (padrão demo)" : ""}
-                  </option>
-                ))}
-              </select>
-              <p
-                id="sale-seller-feedback"
-                className={`mt-1.5 text-xs font-medium ${
-                  sellerError
-                    ? "text-red-600"
-                    : selectedSeller
-                      ? "text-emerald-800"
-                      : "text-slate-500"
-                }`}
-              >
-                {isLoadingSellers
-                  ? "Carregando vendedores disponíveis..."
-                  : sellerError
-                    ? sellerError
-                    : selectedSeller
-                      ? `Selecionado: ${selectedSeller.name} · Nº ${String(selectedSeller.seller_number).padStart(3, "0")} · ID ${selectedSeller.id}${selectedSeller.id === defaultSellerId ? " · Padrão demo" : ""}`
-                      : "Selecione um vendedor disponível."}
-              </p>
+              {defaultSellerId !== null && selectedSeller ? (
+                <>
+                  <p className="text-sm font-bold text-slate-700">
+                    Vendedor da demonstração
+                  </p>
+                  <div
+                    id="sale-seller"
+                    className="mt-2 flex min-h-11 items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5"
+                  >
+                    <span className="min-w-0 truncate text-sm font-bold text-emerald-950">
+                      {selectedSeller.name} · Nº {String(selectedSeller.seller_number).padStart(3, "0")}
+                    </span>
+                    <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-wide text-emerald-800 shadow-sm">
+                      Automático
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs font-medium text-emerald-800">
+                    Todas as vendas deste ambiente são atribuídas automaticamente à Ana Demo.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <label
+                    htmlFor="sale-seller"
+                    className="text-sm font-bold text-slate-700"
+                  >
+                    Vendedor <span className="text-red-600">*</span>
+                  </label>
+                  <select
+                    id="sale-seller"
+                    value={selectedSellerId}
+                    onChange={(event) => {
+                      setSelectedSellerId(event.target.value);
+                      setSellerError(null);
+                      setSubmitError(null);
+                    }}
+                    disabled={isSubmitting || isLoadingSellers || sellers.length === 0}
+                    aria-invalid={Boolean(sellerError)}
+                    aria-describedby="sale-seller-feedback"
+                    className={`${fieldClasses()} mt-2`}
+                  >
+                    <option value="">
+                      {isLoadingSellers
+                        ? "Carregando vendedores..."
+                        : sellers.length === 0
+                          ? "Nenhum vendedor ativo"
+                          : "Selecione um vendedor"}
+                    </option>
+                    {sellers.map((seller) => (
+                      <option key={seller.id} value={seller.id}>
+                        {seller.name} · Nº {String(seller.seller_number).padStart(3, "0")}
+                      </option>
+                    ))}
+                  </select>
+                  <p
+                    id="sale-seller-feedback"
+                    className={`mt-1.5 text-xs font-medium ${
+                      sellerError
+                        ? "text-red-600"
+                        : selectedSeller
+                          ? "text-emerald-800"
+                          : "text-slate-500"
+                    }`}
+                  >
+                    {isLoadingSellers
+                      ? "Carregando vendedores disponíveis..."
+                      : sellerError
+                        ? sellerError
+                        : selectedSeller
+                          ? `Selecionado: ${selectedSeller.name} · Nº ${String(selectedSeller.seller_number).padStart(3, "0")}`
+                          : "Selecione um vendedor disponível."}
+                  </p>
+                </>
+              )}
             </div>
           </section>
 

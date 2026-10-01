@@ -3,12 +3,13 @@ from decimal import Decimal
 from math import ceil
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request
 from sqlalchemy import String, cast, func, or_, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from app.database.db import db
+from app.demo import DEFAULT_DEMO_SELLER_EMAIL
 from app.models.customer import Customer
 from app.models.product import Product
 from app.models.sale import Sale
@@ -374,7 +375,20 @@ def create_sale():
         if customer is None:
             return {"error": "Cliente não encontrado."}, 404
 
-    seller = db.session.get(Seller, validated_data["seller_id"])
+    default_demo_seller = None
+    if current_app.config.get("PUBLIC_DEMO_MODE"):
+        default_demo_seller = Seller.query.filter(
+            func.lower(Seller.email) == DEFAULT_DEMO_SELLER_EMAIL
+        ).first()
+        if default_demo_seller is None:
+            return {
+                "error": "Vendedor padrão da demonstração não disponível."
+            }, 503
+
+    seller = default_demo_seller or db.session.get(
+        Seller,
+        validated_data["seller_id"],
+    )
     if seller is None:
         return {"error": "Vendedor não encontrado."}, 404
 

@@ -112,7 +112,7 @@ def test_create_admin_command_requires_environment_configuration(app):
     assert Account.query.count() == 0
 
 
-def test_seed_demo_command_creates_two_active_sellers(app):
+def test_seed_demo_command_creates_only_default_seller(app):
     runner = app.test_cli_runner()
 
     result = runner.invoke(args=["seed-demo"])
@@ -120,7 +120,6 @@ def test_seed_demo_command_creates_two_active_sellers(app):
     assert result.exit_code == 0
     assert "Seed de vendedores demo concluído." in result.output
     assert '"ana.demo@storesales.local" criado.' in result.output
-    assert '"carlos.demo@storesales.local" criado.' in result.output
     assert [
         (seller.name, seller.email, seller.active)
         for seller in Seller.query.order_by(Seller.seller_number).all()
@@ -147,8 +146,25 @@ def test_seed_demo_command_is_idempotent_and_repairs_default_seller(app):
         email="manual@example.com",
         active=True,
     )
-    db.session.add_all([existing_demo, manual_seller])
+    legacy_seller = Seller(
+        name="Carlos Demo",
+        seller_number=42,
+        email="carlos.demo@storesales.local",
+        active=True,
+    )
+    legacy_sale = Sale(
+        seller=legacy_seller,
+        payment_method="cash",
+        total=Decimal("0.00"),
+    )
+    db.session.add_all([
+        existing_demo,
+        manual_seller,
+        legacy_seller,
+        legacy_sale,
+    ])
     db.session.commit()
+    legacy_sale_id = legacy_sale.id
     runner = app.test_cli_runner()
 
     first_result = runner.invoke(args=["seed-demo"])
@@ -160,27 +176,24 @@ def test_seed_demo_command_is_idempotent_and_repairs_default_seller(app):
         '"ana.demo@storesales.local" já existia e foi mantido.'
         in first_result.output
     )
-    assert '"carlos.demo@storesales.local" criado.' in first_result.output
-    assert second_result.output.count("já existia e foi mantido") == 2
-    assert Seller.query.count() == 3
+    assert "Carlos Demo removido" in first_result.output
+    assert second_result.output.count("já existia e foi mantido") == 1
+    assert Seller.query.count() == 2
 
     preserved_demo = Seller.query.filter_by(
         email="ana.demo@storesales.local"
     ).one()
     preserved_manual = Seller.query.filter_by(email="manual@example.com").one()
-    carlos = Seller.query.filter_by(
-        email="carlos.demo@storesales.local"
-    ).one()
-
     assert preserved_demo.name == "Ana Demo"
     assert preserved_demo.seller_number == 40
     assert preserved_demo.active is True
     assert preserved_manual.name == "Vendedor manual"
     assert preserved_manual.seller_number == 41
     assert preserved_manual.active is True
-    assert carlos.name == "Carlos Demo"
-    assert carlos.seller_number == 42
-    assert carlos.active is True
+    assert Seller.query.filter_by(
+        email="carlos.demo@storesales.local"
+    ).one_or_none() is None
+    assert db.session.get(Sale, legacy_sale_id).seller_id == preserved_demo.id
 
 
 def test_reset_demo_command_restores_original_data_and_preserves_schema(app):
@@ -219,7 +232,7 @@ def test_reset_demo_command_restores_original_data_and_preserves_schema(app):
     assert "Demonstração restaurada com sucesso." in result.output
     assert demo_counts() == {
         "accounts": 1,
-        "sellers": 6,
+        "sellers": 5,
         "products": 9,
         "customers": 6,
         "sales": 12,
