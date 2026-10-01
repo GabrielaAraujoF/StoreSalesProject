@@ -72,6 +72,9 @@ def create_app(config_name=None):
         ) from error
 
     app = Flask(__name__)
+    # Vercel can normalize trailing slashes before proxying requests. Accept
+    # both URL forms so Flask never redirects clients to the Railway origin.
+    app.url_map.strict_slashes = False
     app.config.from_object(config_class)
     app.config["APP_ENV"] = environment
     config_class.init_app(app)
