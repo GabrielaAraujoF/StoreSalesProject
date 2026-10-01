@@ -213,7 +213,7 @@ def create_seller():
     return seller_to_dict(seller), 201
 
 
-@sellers_bp.get("/active")
+@sellers_bp.get("/active", strict_slashes=False)
 def list_active_sellers():
     sellers = (
         Seller.query

@@ -114,6 +114,16 @@ def test_list_active_sellers_is_public_and_returns_minimum_data(client):
     }
 
 
+def test_list_active_sellers_accepts_trailing_slash(client):
+    response = client.get("/api/sellers/active/")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "sellers": [],
+        "default_seller_id": None,
+    }
+
+
 def test_active_sellers_identifies_demo_default(client, app):
     app.config["PUBLIC_DEMO_MODE"] = True
     default_seller = Seller(
